@@ -42,6 +42,10 @@ def main() -> None:
                          "smoke; LIBERO-finetuned ckpts use libero_spatial etc.")
     ap.add_argument("--model-id", default="openvla/openvla-7b")
     ap.add_argument("--out", default="metrics.json")
+    ap.add_argument("--libero-action-fix", action="store_true",
+                    help="apply OpenVLA→LIBERO gripper convention fix: "
+                         "rescale [0,1]→[-1,+1] via sign() and flip sign "
+                         "(OpenVLA's 1=close, LIBERO's 1=open)")
     args = ap.parse_args()
 
     from libero.libero import benchmark, get_libero_path
@@ -109,7 +113,14 @@ def main() -> None:
                                               do_sample=False)
             torch.cuda.synchronize()
             per_step_ms.append((time.time() - s_t0) * 1000)
-            # action: numpy (7,)
+            # action: numpy (7,) — 6 DoF deltas + gripper
+            if args.libero_action_fix:
+                # OpenVLA gripper is in [0,1]; LIBERO expects sign(-1/+1).
+                # Plus OpenVLA defines 1=close while LIBERO defines 1=open,
+                # so we flip the sign as the last step.
+                action = np.asarray(action, dtype=np.float32).copy()
+                action[-1] = np.sign(2 * action[-1] - 1)
+                action[-1] *= -1.0
             obs, reward, done, info = env.step(action.tolist())
             if done:
                 success = bool(info.get("success", reward > 0))
