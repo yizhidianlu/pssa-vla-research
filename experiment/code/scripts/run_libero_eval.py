@@ -46,6 +46,9 @@ def main() -> None:
                     help="apply OpenVLA→LIBERO gripper convention fix: "
                          "rescale [0,1]→[-1,+1] via sign() and flip sign "
                          "(OpenVLA's 1=close, LIBERO's 1=open)")
+    ap.add_argument("--libero-image-fix", action="store_true",
+                    help="apply rgb[::-1, ::-1] (double flip / 180° rotate) "
+                         "matching OpenVLA's official LIBERO image preprocessing")
     args = ap.parse_args()
 
     from libero.libero import benchmark, get_libero_path
@@ -71,6 +74,13 @@ def main() -> None:
         device_map="cuda:0",
     ).eval()
     print(f"    loaded in {time.time()-t0:.1f}s")
+    # Probe available unnorm keys so we can verify args.unnorm_key matches
+    norm_stats = getattr(model, "norm_stats", None) or getattr(model.config, "norm_stats", None)
+    if norm_stats:
+        keys = list(norm_stats.keys())
+        print(f"    available unnorm keys: {keys}")
+        if args.unnorm_key not in keys:
+            print(f"    WARN: --unnorm-key={args.unnorm_key} NOT in available keys")
     torch.cuda.reset_peak_memory_stats()
 
     bddl_path = os.path.join(get_libero_path("bddl_files"),
@@ -100,8 +110,12 @@ def main() -> None:
         per_step_ms = []
         for t in range(args.max_steps):
             rgb = obs["agentview_image"]
-            # LIBERO/mujoco returns vertically flipped; flip back for VLM
-            rgb = rgb[::-1].copy()
+            if args.libero_image_fix:
+                # OpenVLA's official LIBERO eval applies double flip (180° rotate)
+                rgb = rgb[::-1, ::-1].copy()
+            else:
+                # Default: single vertical flip (mujoco→standard image convention)
+                rgb = rgb[::-1].copy()
             pil = Image.fromarray(rgb.astype(np.uint8))
             prompt = (f"In: What action should the robot take to "
                       f"{task.language.strip().lower()}?\nOut:")
