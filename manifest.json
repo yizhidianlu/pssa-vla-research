@@ -5,7 +5,7 @@
   "topic_brief": "Move VLA grounding from single-frame region-level alignment to temporally-consistent scene-level entity tracking; use that consistency to detect and correct execution-time errors in long-horizon, multi-stage, dynamic manipulation.",
   "pipeline_mode": "deep",
   "paper_mode": "original_research",
-  "current_stage": "review_doc_only",
+  "current_stage": "phase1_baseline_sweep_in_progress",
   "started_at": "2026-05-09T00:04:00+08:00",
   "stages": {
     "init": {
@@ -58,36 +58,70 @@
       "smoke_status": "pending_gpu_env (torch not installed locally — gate per blueprint §9 to be run on GPU box)"
     },
     "execution": {
-      "status": "libero_smoke_complete",
-      "smoke_runs": [
-        "experiment/runs/smoke-20260509-195012",
-        "experiment/runs/libero-smoke-20260509-224801"
-      ],
+      "status": "phase1_baseline_sweep_in_progress",
       "started_at": "2026-05-09T18:30:00+08:00",
-      "completed_at": "2026-05-09T22:53:00+08:00",
       "hardware": "AutoDL A800 80GB PCIe",
-      "smoke_findings": {
-        "synthetic_e2e": "OpenVLA+PSSA stub on synthetic obs: 188ms/step, 15.45GB VRAM",
-        "libero_e2e": "OpenVLA generalist on libero_spatial:0, 5x200 steps, 0/5 SR (expected: no LIBERO finetune), 190ms/step stable, no crash, no EGL leak",
+      "smoke_runs_completed": [
+        {
+          "dir": "experiment/runs/smoke-20260509-195012",
+          "what": "synthetic e2e: OpenVLA-7B inference + PSSA stub backward",
+          "result": "188 ms/step, 15.45 GB VRAM, loss=1.507"
+        },
+        {
+          "dir": "experiment/runs/libero-smoke-20260509-224801",
+          "what": "real LIBERO sim: OpenVLA generalist on libero_spatial:0",
+          "result": "0/5 SR (expected — no LIBERO finetune), 190 ms/step, sim+render+inference no leaks"
+        },
+        {
+          "dir": "experiment/runs/libero-ft-v4-20260510-001814",
+          "what": "real LIBERO sim: OpenVLA-7B-finetuned-libero-spatial on libero_spatial:0",
+          "result": "5/5 SR (100%), mean 83 steps to success, 195 ms/step",
+          "fixes_required": [
+            "--libero-action-fix: gripper [0,1]→sign({-1,+1}) + flip sign (OpenVLA 1=close vs LIBERO 1=open)",
+            "--libero-image-fix: rgb[::-1,::-1] 180° rotate to match LIBERO finetune training distribution"
+          ]
+        }
+      ],
+      "phase1_sweep": {
+        "status": "running",
+        "started_at": "2026-05-10T00:32:17+08:00",
+        "remote_pid": 19669,
+        "remote_dir": "/root/autodl-tmp/pssa-vla/experiment/runs/libero_spatial_sweep-20260510-003217",
+        "scope": "10 tasks × 50 rollouts on libero_spatial with OpenVLA-7B-finetuned-libero-spatial",
+        "expected_wallclock": "2.5-3 GPU-hr",
+        "expected_cost": "¥22-27"
+      },
+      "system_state": {
         "version_pins": "transformers==4.45.2, timm==0.9.16, tokenizers==0.20.3, robosuite==1.4.0, bddl==1.0.1, mujoco==3.1.6",
         "network_workarounds": [
           "HF_ENDPOINT=https://hf-mirror.com (huggingface.co blocked from CN)",
           "git config insteadOf https://gh-proxy.com/https://github.com/ (GitHub clone throttled)"
         ],
-        "system_pkgs_required": "apt install libegl1 libgl1 (libglvnd dispatcher; AutoDL image lacks it by default)",
-        "libero_packaging_fix": "touch /root/autodl-tmp/LIBERO/libero/__init__.py (missing in clone, find_packages broken without it)"
+        "system_pkgs_required": "apt install libegl1 libgl1",
+        "libero_packaging_fix": "touch /root/autodl-tmp/LIBERO/libero/__init__.py",
+        "hf_cache_size_gb": 28,
+        "hf_cache_dir": "/root/autodl-tmp/hf"
       },
-      "remaining": "scale to mid budget (1500-2200 RMB / 8-10 A100-days); no compute-side blockers; next: download openvla-7b-finetuned-libero-spatial for real numbers"
+      "remaining_after_phase1": [
+        "Phase 2: implement PSSA action-head training pipeline (~300 lines code, no GPU)",
+        "Phase 2: train PSSA on libero_spatial (~6-12 GPU-hr, ¥50-100)",
+        "Phase 3: 4 ablations (−PSE, −XTC, −CRED, multi-frame ViT same-budget)",
+        "Phase 3: LIBERO-LONG, LIBERO-Plus, CALVIN ABC-D"
+      ]
     },
-    "analysis": {"status": "smoke_only", "smoke_summary": "experiment/runs/smoke-20260509-195012/README.md"},
+    "analysis": {
+      "status": "smoke_only",
+      "summaries": [
+        "experiment/runs/smoke-20260509-195012/README.md (synthetic e2e perf)",
+        "experiment/runs/libero-smoke-20260509-224801/README.md (LIBERO sim integration)",
+        "experiment/runs/libero-ft-v4-20260510-001814/README.md (5/5 SR, 4-version debug journey)"
+      ]
+    },
     "figure_gen": {
       "status": "partial",
-      "scope": "framework figure only; quantitative figures blocked on EXECUTION",
+      "scope": "framework figure only; quantitative figures blocked until Phase 2",
       "artifacts": ["figures/framework.tex", "figures/README.md"]
     },
-    "execution": {"status": "pending"},
-    "analysis": {"status": "pending"},
-    "figure_gen": {"status": "pending"},
     "writing": {
       "status": "skeleton_complete",
       "started_at": "2026-05-09T01:25:00+08:00",
@@ -103,10 +137,11 @@
     }
   },
   "checkpoints": {
-    "last": "review_doc_only",
-    "next": "execution_when_compute_available",
+    "last": "phase1_baseline_sweep_launched",
+    "next": "phase1_aggregate_then_phase2_pssa_training",
     "resume_via": "/project:resume",
-    "resume_command": "python experiment/code/tests/smoke.py && python experiment/code/scripts/train.py --config-name pssa_libero_long"
+    "resume_command": "ssh root@connect.nma1.seetacloud.com -p 50535 'tail -30 /root/autodl-tmp/pssa-vla/experiment/runs/libero_spatial_sweep-20260510-003217/sweep.log'",
+    "post_phase1": "fetch task_*.json + summary.json, archive under experiment/runs/, update Table 1 baseline numbers in drafts/main.tex"
   },
   "notes": "User-provided motivation: existing VLA models only do per-frame visual grounding; proposed method introduces cross-time-consistent scene entity representation to track objects + spatial relations, enabling long-horizon stability and execution-time error correction via consistency."
 }
