@@ -1,0 +1,9 @@
+# Ensure scripts run on Linux even when committed from Windows.
+*.sh    text eol=lf
+*.py    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.slurm text eol=lf
+
+# Default: let git auto-detect text vs binary, normalize text to LF in repo
+* text=auto
