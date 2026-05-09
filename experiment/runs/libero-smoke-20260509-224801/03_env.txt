@@ -1,0 +1,20 @@
+## GPU
+GPU 0: NVIDIA A800 80GB PCIe (UUID: GPU-54f73019-ebb7-1711-04fb-6ee18ee170e7)
+
+## key versions
+Name: libero
+Version: 0.1.0
+Name: robosuite
+Version: 1.4.0
+Name: bddl
+Version: 1.0.1
+Name: mujoco
+Version: 3.1.6
+Name: transformers
+Version: 4.45.2
+Name: timm
+Version: 0.9.16
+Name: tokenizers
+Version: 0.20.3
+Name: torch
+Version: 2.4.1+cu124

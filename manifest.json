@@ -58,18 +58,26 @@
       "smoke_status": "pending_gpu_env (torch not installed locally — gate per blueprint §9 to be run on GPU box)"
     },
     "execution": {
-      "status": "smoke_complete",
-      "smoke_run_dir": "experiment/runs/smoke-20260509-195012",
+      "status": "libero_smoke_complete",
+      "smoke_runs": [
+        "experiment/runs/smoke-20260509-195012",
+        "experiment/runs/libero-smoke-20260509-224801"
+      ],
       "started_at": "2026-05-09T18:30:00+08:00",
-      "completed_at": "2026-05-09T19:53:00+08:00",
+      "completed_at": "2026-05-09T22:53:00+08:00",
       "hardware": "AutoDL A800 80GB PCIe",
       "smoke_findings": {
-        "probe_b_pssa": "loss=1.507 (action=1.297 + xtc=0.209), backward OK on cuda",
-        "probe_a_openvla": "load=15.1s, 7.54B params, 15.45GB VRAM (5x headroom), 188ms/step stable, 195ms p95",
-        "version_pins_required": "transformers==4.45.2, timm==0.9.16, tokenizers==0.20.3",
-        "network_workaround": "HF_ENDPOINT=https://hf-mirror.com (huggingface.co blocked from CN AutoDL)"
+        "synthetic_e2e": "OpenVLA+PSSA stub on synthetic obs: 188ms/step, 15.45GB VRAM",
+        "libero_e2e": "OpenVLA generalist on libero_spatial:0, 5x200 steps, 0/5 SR (expected: no LIBERO finetune), 190ms/step stable, no crash, no EGL leak",
+        "version_pins": "transformers==4.45.2, timm==0.9.16, tokenizers==0.20.3, robosuite==1.4.0, bddl==1.0.1, mujoco==3.1.6",
+        "network_workarounds": [
+          "HF_ENDPOINT=https://hf-mirror.com (huggingface.co blocked from CN)",
+          "git config insteadOf https://gh-proxy.com/https://github.com/ (GitHub clone throttled)"
+        ],
+        "system_pkgs_required": "apt install libegl1 libgl1 (libglvnd dispatcher; AutoDL image lacks it by default)",
+        "libero_packaging_fix": "touch /root/autodl-tmp/LIBERO/libero/__init__.py (missing in clone, find_packages broken without it)"
       },
-      "remaining": "scale to mid budget (1500-2200 RMB / 8-10 A100-days) when ready; no compute-side blockers"
+      "remaining": "scale to mid budget (1500-2200 RMB / 8-10 A100-days); no compute-side blockers; next: download openvla-7b-finetuned-libero-spatial for real numbers"
     },
     "analysis": {"status": "smoke_only", "smoke_summary": "experiment/runs/smoke-20260509-195012/README.md"},
     "figure_gen": {

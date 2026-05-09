@@ -1,0 +1,53 @@
+{
+  "suite": "libero_spatial",
+  "task_id": 0,
+  "task_name": "pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate",
+  "task_language": "pick up the black bowl between the plate and the ramekin and place it on the plate",
+  "model_id": "openvla/openvla-7b",
+  "unnorm_key": "bridge_orig",
+  "n_rollouts": 5,
+  "n_success": 0,
+  "success_rate": 0.0,
+  "rollouts": [
+    {
+      "rollout": 0,
+      "success": false,
+      "steps": 200,
+      "step_ms_avg": 191.45180702209473,
+      "step_ms_p95": 195.71926593780518,
+      "peak_vram_gb": 15.44951552
+    },
+    {
+      "rollout": 1,
+      "success": false,
+      "steps": 200,
+      "step_ms_avg": 188.6099147796631,
+      "step_ms_p95": 197.2874879837036,
+      "peak_vram_gb": 15.44951552
+    },
+    {
+      "rollout": 2,
+      "success": false,
+      "steps": 200,
+      "step_ms_avg": 190.4986333847046,
+      "step_ms_p95": 196.80593013763428,
+      "peak_vram_gb": 15.44951552
+    },
+    {
+      "rollout": 3,
+      "success": false,
+      "steps": 200,
+      "step_ms_avg": 190.46390771865845,
+      "step_ms_p95": 203.79421710968018,
+      "peak_vram_gb": 15.44951552
+    },
+    {
+      "rollout": 4,
+      "success": false,
+      "steps": 200,
+      "step_ms_avg": 190.34759640693665,
+      "step_ms_p95": 199.81095790863034,
+      "peak_vram_gb": 15.44951552
+    }
+  ]
+}
