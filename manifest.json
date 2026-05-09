@@ -1,0 +1,91 @@
+{
+  "session_id": "20260509000456c3a8",
+  "topic": "面向VLA模型的持续时序场景空间对齐方法",
+  "topic_en": "Persistent Temporal Scene-Spatial Alignment for VLA Models",
+  "topic_brief": "Move VLA grounding from single-frame region-level alignment to temporally-consistent scene-level entity tracking; use that consistency to detect and correct execution-time errors in long-horizon, multi-stage, dynamic manipulation.",
+  "pipeline_mode": "deep",
+  "paper_mode": "original_research",
+  "current_stage": "review_doc_only",
+  "started_at": "2026-05-09T00:04:00+08:00",
+  "stages": {
+    "init": {
+      "status": "completed",
+      "started_at": "2026-05-09T00:04:00+08:00",
+      "completed_at": "2026-05-09T00:05:00+08:00"
+    },
+    "ideation": {
+      "status": "completed",
+      "started_at": "2026-05-09T00:05:00+08:00",
+      "completed_at": "2026-05-09T00:25:00+08:00",
+      "artifacts": [
+        "papers/literature_seed.md",
+        "plans/ideation_summary.md"
+      ],
+      "key_finding": "Gap: persistent scene-entity rep used as VLA grounding + consistency residual as intrinsic error signal — combination not yet covered.",
+      "candidate_name": "PSSA-VLA"
+    },
+    "planning": {
+      "status": "completed",
+      "started_at": "2026-05-09T00:25:00+08:00",
+      "completed_at": "2026-05-09T00:40:00+08:00",
+      "artifacts": ["plans/experiment_blueprint.md"],
+      "primary_benchmarks": ["LIBERO-LONG", "LIBERO-Plus", "CALVIN ABC-D"],
+      "baselines": ["OpenVLA", "pi0", "Long-VLA", "Seer", "VLA-in-the-Loop"],
+      "compute_estimate": "16-20 A100-days"
+    },
+    "setup": {
+      "status": "completed",
+      "started_at": "2026-05-09T00:40:00+08:00",
+      "completed_at": "2026-05-09T00:50:00+08:00",
+      "artifacts": ["experiment/setup.md", "experiment/env/conda.yml", "experiment/env/pip-requirements.txt"],
+      "smoke_status": "deferred_no_gpu"
+    },
+    "coding": {
+      "status": "completed",
+      "started_at": "2026-05-09T00:50:00+08:00",
+      "completed_at": "2026-05-09T01:25:00+08:00",
+      "artifacts": [
+        "experiment/code/pssa/{__init__,pse_tok,xtc_loss,cred,model}.py",
+        "experiment/code/baselines/{openvla_wrapper,pi0_wrapper}.py",
+        "experiment/code/data/libero_dataset.py",
+        "experiment/code/configs/{default,pssa_libero_long}.yaml",
+        "experiment/code/scripts/{train,eval}.py",
+        "experiment/code/scripts/slurm/train.slurm",
+        "experiment/code/tests/smoke.py",
+        "experiment/code/README.md"
+      ],
+      "syntax_check": "passed (11/11 files via py_compile)",
+      "smoke_status": "pending_gpu_env (torch not installed locally — gate per blueprint §9 to be run on GPU box)"
+    },
+    "execution": {"status": "deferred_no_compute", "reason": "16-20 A100-days budget unavailable in this session; ready to run via SLURM script when compute available"},
+    "analysis": {"status": "deferred_no_results"},
+    "figure_gen": {
+      "status": "partial",
+      "scope": "framework figure only; quantitative figures blocked on EXECUTION",
+      "artifacts": ["figures/framework.tex", "figures/README.md"]
+    },
+    "execution": {"status": "pending"},
+    "analysis": {"status": "pending"},
+    "figure_gen": {"status": "pending"},
+    "writing": {
+      "status": "skeleton_complete",
+      "started_at": "2026-05-09T01:25:00+08:00",
+      "completed_at": "2026-05-09T01:55:00+08:00",
+      "artifacts": ["drafts/main.tex", "drafts/refs.bib"],
+      "todo_markers": "Experiments §5.2-5.5 + abstract numbers; tied to EXECUTION"
+    },
+    "review": {
+      "status": "doc_only_complete",
+      "started_at": "2026-05-09T01:55:00+08:00",
+      "completed_at": "2026-05-09T02:10:00+08:00",
+      "artifacts": ["output/review.md", "output/checkpoint_summary.md"]
+    }
+  },
+  "checkpoints": {
+    "last": "review_doc_only",
+    "next": "execution_when_compute_available",
+    "resume_via": "/project:resume",
+    "resume_command": "python experiment/code/tests/smoke.py && python experiment/code/scripts/train.py --config-name pssa_libero_long"
+  },
+  "notes": "User-provided motivation: existing VLA models only do per-frame visual grounding; proposed method introduces cross-time-consistent scene entity representation to track objects + spatial relations, enabling long-horizon stability and execution-time error correction via consistency."
+}

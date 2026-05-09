@@ -1,0 +1,21 @@
+name: pssa-vla
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip>=24.0
+  - pytorch=2.4.*
+  - pytorch-cuda=12.4
+  - torchvision=0.19.*
+  - cudatoolkit=12.4
+  - numpy<2
+  - scipy
+  - matplotlib
+  - tqdm
+  - rich
+  - hydra-core>=1.3
+  - omegaconf
+  - pip:
+      - -r pip-requirements.txt

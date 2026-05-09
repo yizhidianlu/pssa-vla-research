@@ -1,0 +1,50 @@
+# default hydra config — overridden by task-specific configs
+
+defaults:
+  - _self_
+
+run_name: pssa-default
+seed: 0
+data_root: ${oc.env:NR_DATA, ./data}
+device: cuda
+
+backbone:
+  name: openvla
+  model_id: openvla/openvla-7b
+  freeze_vision: false
+
+pssa:
+  use_pse: true
+  use_xtc: true
+  use_cred: true
+  pse:
+    n_entities: 32
+    feature_dim: 384
+    token_dim: 4096
+    confidence_threshold: 0.3
+  xtc:
+    lambda_pred: 1.0
+    lambda_contrast: 0.1
+    contrast_temperature: 0.07
+  cred:
+    tau: 0.5
+    k_consecutive: 3
+    cooldown_steps: 8
+
+train:
+  batch_size: 4
+  episodes_per_step: 1
+  max_steps: 200000
+  lr: 1.0e-4
+  weight_decay: 1.0e-2
+  grad_clip: 1.0
+  log_every: 50
+  ckpt_every: 5000
+
+eval:
+  benchmarks:
+    - libero_long
+    - libero_plus
+    - calvin_abc_d
+  rollouts_per_task: 50
+  seeds: [0, 1, 2]

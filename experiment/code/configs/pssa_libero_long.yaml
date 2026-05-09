@@ -1,0 +1,10 @@
+defaults:
+  - default
+  - _self_
+
+run_name: pssa-libero-long-s0
+train:
+  episodes_per_step: 2
+eval:
+  benchmarks: [libero_long]
+  rollouts_per_task: 50

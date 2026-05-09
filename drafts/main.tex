@@ -1,0 +1,278 @@
+% PSSA-VLA — manuscript draft (results sections marked TODO until EXECUTION runs)
+\documentclass[10pt,letterpaper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{cite}
+
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
+\newcommand{\method}{\textsc{PSSA-VLA}\xspace}
+\usepackage{xspace}
+
+\title{Persistent Temporal Scene-Spatial Alignment for\\
+Vision-Language-Action Models}
+
+\author{%
+  \todo{author block}\\
+  \todo{affiliations}
+}
+
+\date{}
+
+\begin{document}
+\maketitle
+
+% ======================================================================
+\begin{abstract}
+Existing vision-language-action (VLA) models ground language onto vision
+\emph{per frame}, re-binding the instruction to whatever pixels they see at
+each decision step. We argue this lack of identity continuity for scene
+entities across time is a primary source of cascading error in long-horizon
+manipulation, of brittleness under perturbation, and of the inference-time
+overhead of recent self-correction systems that resort to external world
+models.
+
+We propose \method, a VLA architecture that maintains an episode-level
+persistent scene-entity representation and uses it as the grounding signal
+of the action head. \method has three components: (i) a Persistent
+Scene-Entity Tokenizer (PSE-Tok) that initializes a Gaussian-splat-based
+representation of the scene from the first few frames and emits
+identity-stable entity tokens at every step; (ii) a Cross-Time Consistency
+Loss (XTC-Loss) that supervises entity-feature trajectories with the
+predicted action-effect; and (iii) a Consistency-Residual Error Detector
+(CRED) that flags inference-time drift from the entity prior \emph{without}
+an external world model.
+
+On long-horizon manipulation benchmarks (LIBERO-LONG, CALVIN ABC-D), \method
+\todo{insert success-rate gap vs.\ matched OpenVLA / $\pi_0$ / Long-VLA /
+Seer baselines}. On perturbed evaluation (LIBERO-Plus / LIBERO-PRO),
+\method \todo{insert robustness gap}. CRED detects impending failures with
+\todo{AUROC} and yields \todo{closed-loop SR gain} when correction is
+enabled, at \todo{$\Delta$ inference latency} per step versus
+world-model-based VLA-in-the-Loop.
+\end{abstract}
+
+% ======================================================================
+\section{Introduction}\label{sec:intro}
+
+\paragraph{From per-frame grounding to scene-level continuity.}
+Modern VLA models~\cite{rt2,openvla,pi0} treat each control step as an
+independent visual-grounding problem: a vision-language model re-binds the
+instruction to the current observation and a small action head produces
+the next action. This per-frame grounding is sufficient for short, static,
+clutter-free tasks but fails to track \emph{the same} object instance
+across the long episodes that real manipulation tasks require.
+Recent long-horizon VLAs~\cite{longvla,seqvla,seer} attack the problem by
+adding action-side temporal structure (phase masking, subtask completion
+detection, latent planning), yet still re-ground the instruction to pixels
+on every step. The persistent-representation literature
+(POGS~\cite{pogs}, 4D-GS~\cite{fourdgs}, DovSG~\cite{dovsg},
+Motion-Blender GS~\cite{motionblender}) provides identity-stable scene
+representations, but uses them for tracking, rendering, or as planner
+prompts, never as the conditioning of the action head itself.
+Self-correction systems~\cite{vlaintheloop,recapa,kitchenvla} resort to
+external world models or VLM evaluators at inference time.
+
+\paragraph{Our position.}
+We argue the missing piece is a representation that is simultaneously
+(i) \emph{action-conditioning} — its tokens enter the VLA head — and
+(ii) \emph{persistent} — entity identity is preserved across the entire
+episode. Once such a representation exists, cross-time consistency
+becomes a usable supervisory and inference-time signal: violations of
+entity-trajectory smoothness are an \emph{intrinsic} error indicator that
+needs no external corrector.
+
+\paragraph{Contributions.} We make three contributions:
+\begin{enumerate}
+  \item \textbf{PSE-Tok}, a persistent scene-entity tokenizer built on a
+        POGS-style Gaussian splat that emits per-step identity-stable
+        entity tokens consumed directly by the VLA action head.
+  \item \textbf{XTC-Loss}, a cross-time consistency loss that supervises
+        entity-feature trajectories with the predicted action-effect and a
+        contrastive identity term.
+  \item \textbf{CRED}, a parameter-free consistency-residual error
+        detector and corrective gate for the action head, replacing
+        external world-model correctors.
+\end{enumerate}
+\todo{tighten contributions list to match abstract numbers once results
+are in.}
+
+% ======================================================================
+\section{Related Work}\label{sec:related}
+
+\paragraph{Long-horizon VLA models.}
+Long-VLA~\cite{longvla} introduces phase-aware input masking that
+segments each subtask into \textit{move} and \textit{interact} phases.
+SeqVLA~\cite{seqvla} adds a completion-aware detection head to $\pi_0$
+to auto-trigger subtask transitions. FUTURE-VLA~\cite{futurevla}
+compresses spatiotemporal information into a latent representation and
+predicts long-horizon action chunks autoregressively. ThinkAct~\cite{thinkact}
+trains a multimodal LLM to generate embodied plans and rewards
+trajectory consistency at the latent-plan level. Seer~\cite{seer}
+reports the strongest aggregate gains on LIBERO-LONG and CALVIN ABC-D
+to date. None of these works installs identity-stable entity tracks
+inside the action head; \method is complementary to phase masking and
+subtask detection and can stack on top of any of them.
+
+\paragraph{Persistent and 4D scene representation.}
+Persistent Object Gaussian Splat (POGS)~\cite{pogs} integrates language,
+grouping, and self-supervised features into an explicit 3D Gaussian
+representation that persists across interactions. 4D-GS~\cite{fourdgs}
+and Hybrid 3D-4D GS~\cite{hybridgs} extend Gaussians along a temporal
+axis. Motion-Blender GS~\cite{motionblender} attaches an explicit motion
+graph to a dynamic GS for manipulation planning and demonstration
+synthesis. DovSG~\cite{dovsg} maintains a dynamic open-vocabulary 3D
+scene graph for long-term mobile manipulation. CogACT~\cite{cogact}
+conditions a diffusion policy on a semantic scene graph. \method differs
+by routing the persistent representation \emph{into the action head} and
+by using the cross-time consistency residual as an inference-time
+correction signal.
+
+\paragraph{Execution-time error detection and self-correction.}
+VLA-in-the-Loop~\cite{vlaintheloop} introduces an event-triggered world
+model that synthesizes a successful future video and decodes corrective
+actions via inverse dynamics. ReCAPA~\cite{recapa} predicts cascading
+failures hierarchically. KitchenVLA~\cite{kitchenvla} uses a VLM
+evaluator to detect domain mismatches between human video and robot
+observation. \method discards the external world model and VLM
+evaluator: the consistency residual against the persistent entity prior
+serves the same purpose at lower inference cost (Section~\ref{sec:method}).
+
+% ======================================================================
+\section{Method}\label{sec:method}
+
+\subsection{Overview}
+
+\method augments a VLA backbone $\pi_\theta$ with a persistent scene-entity
+state $\mathcal{S}$ that is initialized once per episode from the first
+$T_0$ frames and updated at every step thereafter. At each step $t$ the
+action head consumes the standard pair $(\ell, o_t)$ \emph{plus} a set
+of $N$ entity tokens $\{e^i_t\}_{i=1}^{N}$ read out from $\mathcal{S}$:
+\begin{equation}
+  a_t \;=\; \pi_\theta\!\bigl(\ell,\; \phi_v(o_t),\; \{e^i_t\}_{i=1}^{N}\bigr).
+\end{equation}
+Figure~\ref{fig:framework} gives an end-to-end view.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{../figures/framework.pdf}
+  \caption{\method end-to-end. PSE-Tok keeps an episode-level Persistent
+  Gaussian Splat of scene entities and emits identity-stable tokens at
+  every step. The VLA action head conditions on these tokens in addition
+  to per-frame ViT tokens. CRED watches the cross-time consistency
+  residual; sustained violations freeze the action and trigger a replan
+  from the persistent prior.}
+  \label{fig:framework}
+\end{figure}
+
+\subsection{Persistent Scene-Entity Tokenizer (PSE-Tok)}
+
+Given the first $T_0$ frames of an episode, we run SAM-2 to extract up to
+$N$ entity masks $\{m^i_{t}\}$, lift them to 3D using available depth, and
+fit a persistent Gaussian splat following POGS~\cite{pogs}. Each entity
+is assigned a stable ID and a feature vector $f^i_0\in\mathbb{R}^{D}$ from
+a vision encoder $\phi_v$. At step $t>T_0$ we update each entity's center
+$c^i_t$ via an action-conditioned warp, refresh its appearance feature
+with an exponential moving average against the current frame's masked
+features, and decay its confidence $\rho^i_t\in[0,1]$ if the entity is
+not re-asserted. The output token at step $t$ is
+\begin{equation}
+  e^i_t \;=\; \mathrm{Proj}\bigl([f^i_t \,\|\, c^i_t]\bigr)
+              \;+\; \mathrm{Embed}(\mathrm{ID}_i),
+\end{equation}
+masked by $\mathbb{1}[\rho^i_t > \tau_\rho]$ and passed to the action
+head as a prefix.
+
+\subsection{Cross-Time Consistency Loss (XTC-Loss)}
+
+Let $\hat f^i_{t} = f^i_{t-1} + \Delta\!f_{\text{pred}}(a_{t-1})$ be the
+predicted entity feature one step ahead, where $\Delta\!f_{\text{pred}}$
+is a small action-conditioned dynamics module. We define
+\begin{equation}
+\mathcal{L}_{\text{xtc}} \;=\;
+  \underbrace{\lambda_1 \!\sum_i \rho^i_t \,\|f^i_t - \hat f^i_t\|^2}
+  _{\text{predicted-effect residual}}
+  \;+\;
+  \underbrace{\lambda_2\,
+    \mathcal{L}_{\text{InfoNCE}}\!\bigl(f^i_t,\,f^{i+}_t\bigr)}
+  _{\text{identity contrastive}},
+\end{equation}
+where $f^{i+}_t$ is an augmented view of the same entity. $\mathcal{L}_{\text{xtc}}$
+is added to the standard action-prediction loss during training.
+
+\subsection{Consistency-Residual Error Detector (CRED)}
+
+At inference, define the per-step scalar residual
+$r_t = \tfrac{1}{\sum_i \rho^i_t}\sum_i \rho^i_t\,\|f^i_t-\hat f^i_t\|^2$.
+If $r_t > \tau$ for $K$ consecutive steps, CRED freezes the action and
+asks the controller to replan from the persistent prior. CRED is
+parameter-free; the only hyperparameters are $(\tau, K, \text{cooldown})$.
+CRED replaces the world-model corrector of VLA-in-the-Loop with a signal
+that the architecture already produces.
+
+% ======================================================================
+\section{Experiments}\label{sec:experiments}
+
+\subsection{Setup}
+\paragraph{Benchmarks.} Primary: LIBERO-LONG~\cite{libero},
+LIBERO-Plus~\cite{liberoplus}, CALVIN ABC-D~\cite{calvin}. Secondary:
+VLABench long-horizon track~\cite{vlabench}.
+\paragraph{Baselines.} OpenVLA-7B~\cite{openvla}, $\pi_0$~\cite{pi0},
+Long-VLA~\cite{longvla}, Seer~\cite{seer}, and VLA-in-the-Loop for the
+RQ3 head-to-head~\cite{vlaintheloop}.
+\paragraph{Protocol.} 3 seeds; 50 rollouts/task on LIBERO; CALVIN
+ABC$\to$D zero-shot; mean$\pm$stderr; Wilcoxon signed-rank with Bonferroni
+correction across the 5 baselines. Compute budget 16--20 A100-days.
+
+\subsection{RQ1 — Long-horizon capability}
+\todo{Table 1: \method vs. baselines on LIBERO-LONG and CALVIN ABC-D
+(success rate, average completion length).}
+
+\subsection{RQ2 — Robustness under perturbation}
+\todo{Table 2: \method vs. baselines on LIBERO-Plus / LIBERO-PRO splits
+(occluder, distractor, viewpoint shift).}
+
+\subsection{RQ3 — Failure detection and correction}
+\todo{Figure: AUROC of failure prediction vs. residual horizon.}
+\todo{Table 3: closed-loop SR with CRED on/off vs. VLA-in-the-Loop, plus
+inference latency per step.}
+
+\subsection{RQ4 — Ablations}
+\todo{Table 4: PSSA, $-$PSE-Tok, $-$XTC-Loss, $-$CRED.}
+
+\subsection{Qualitative analysis}
+\todo{Figure: rollout traces with CRED-fired moments highlighted on
+LIBERO-LONG \texttt{kitchen-pickup-and-place} and CALVIN \texttt{D}
+chains.}
+
+% ======================================================================
+\section{Limitations}\label{sec:limits}
+
+\method assumes the first $T_0$ frames are sufficient to instantiate
+identity-stable entities; scenes that introduce novel entities mid-episode
+require an open-vocabulary refresh path (we use SAM-2 prompts as a
+stop-gap; a learned refresh is left to future work). The CRED threshold
+is benchmark-tuned in our experiments; an adaptive threshold remains
+open. Finally, the persistent splat adds 3D-rendering compute on top of
+the VLA forward pass; we report end-to-end latency to make the tradeoff
+explicit.
+
+% ======================================================================
+\section{Conclusion}\label{sec:conclusion}
+
+We argued that the persistent piece missing from current VLA stacks is
+not yet another temporal action smoother but an identity-stable
+scene-entity representation that enters the action head and supplies a
+free cross-time consistency signal. \method is one realization of this
+idea; \todo{summarize empirical gains} suggest the abstraction is
+worth installing in long-horizon VLA designs.
+
+\bibliographystyle{plain}
+\bibliography{refs}
+
+\end{document}
