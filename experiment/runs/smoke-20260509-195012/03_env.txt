@@ -1,0 +1,15 @@
+## GPU
+GPU 0: NVIDIA A800 80GB PCIe (UUID: GPU-54f73019-ebb7-1711-04fb-6ee18ee170e7)
+
+## torch
+2.4.1+cu124 cuda 12.4 avail True
+
+## key versions
+Name: transformers
+Version: 4.45.2
+Name: timm
+Version: 0.9.16
+Name: tokenizers
+Version: 0.20.3
+Name: torch
+Version: 2.4.1+cu124

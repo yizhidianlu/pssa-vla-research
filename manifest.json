@@ -57,8 +57,21 @@
       "syntax_check": "passed (11/11 files via py_compile)",
       "smoke_status": "pending_gpu_env (torch not installed locally — gate per blueprint §9 to be run on GPU box)"
     },
-    "execution": {"status": "deferred_no_compute", "reason": "16-20 A100-days budget unavailable in this session; ready to run via SLURM script when compute available"},
-    "analysis": {"status": "deferred_no_results"},
+    "execution": {
+      "status": "smoke_complete",
+      "smoke_run_dir": "experiment/runs/smoke-20260509-195012",
+      "started_at": "2026-05-09T18:30:00+08:00",
+      "completed_at": "2026-05-09T19:53:00+08:00",
+      "hardware": "AutoDL A800 80GB PCIe",
+      "smoke_findings": {
+        "probe_b_pssa": "loss=1.507 (action=1.297 + xtc=0.209), backward OK on cuda",
+        "probe_a_openvla": "load=15.1s, 7.54B params, 15.45GB VRAM (5x headroom), 188ms/step stable, 195ms p95",
+        "version_pins_required": "transformers==4.45.2, timm==0.9.16, tokenizers==0.20.3",
+        "network_workaround": "HF_ENDPOINT=https://hf-mirror.com (huggingface.co blocked from CN AutoDL)"
+      },
+      "remaining": "scale to mid budget (1500-2200 RMB / 8-10 A100-days) when ready; no compute-side blockers"
+    },
+    "analysis": {"status": "smoke_only", "smoke_summary": "experiment/runs/smoke-20260509-195012/README.md"},
     "figure_gen": {
       "status": "partial",
       "scope": "framework figure only; quantitative figures blocked on EXECUTION",
