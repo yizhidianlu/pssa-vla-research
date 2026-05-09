@@ -86,18 +86,15 @@ def main() -> None:
         env.reset()
         env.set_init_state(init_states[r % len(init_states)])
 
-        # LIBERO convention: 10 dummy steps to settle dynamics
+        # LIBERO convention: 10 dummy steps to settle dynamics; keep last obs
         dummy = np.array([0., 0., 0., 0., 0., 0., -1.])
+        obs = None
         for _ in range(10):
-            env.step(dummy)
+            obs, _, _, _ = env.step(dummy)
 
         success = False
         per_step_ms = []
         for t in range(args.max_steps):
-            obs = env._get_observations() if hasattr(env, "_get_observations") else env.observation_spec()
-            # OffScreenRenderEnv's `step` returns obs; we keep last_obs across loop
-            if t == 0:
-                obs, _, _, _ = env.step(dummy)
             rgb = obs["agentview_image"]
             # LIBERO/mujoco returns vertically flipped; flip back for VLM
             rgb = rgb[::-1].copy()
