@@ -7,6 +7,9 @@
 #
 # Defaults: n_rollouts=50.
 set -euo pipefail
+# Robosuite leaks fds; per-task even with env reuse we want headroom for
+# 10 task creations + processor downloads + model checkpoint fds.
+ulimit -n 65536
 source /root/miniconda3/etc/profile.d/conda.sh
 conda activate pssa-vla
 source /root/autodl-tmp/.hf_env

@@ -93,10 +93,12 @@ def main() -> None:
         "camera_names": ["agentview"],
     }
 
+    # Single env across rollouts — recreating per rollout leaks fds in robosuite
+    # MjRenderContext / EGLGLContext, hitting ulimit -n after ~10 rollouts.
+    env = OffScreenRenderEnv(**env_args)
     rollouts = []
     for r in range(args.rollouts):
         print(f"==> rollout {r}")
-        env = OffScreenRenderEnv(**env_args)
         env.reset()
         env.set_init_state(init_states[r % len(init_states)])
 
@@ -140,7 +142,6 @@ def main() -> None:
                 success = bool(info.get("success", reward > 0))
                 break
 
-        env.close()
         rec = {
             "rollout": r,
             "success": success,
@@ -153,6 +154,7 @@ def main() -> None:
         print(f"    success={success} steps={t+1} "
               f"step_ms={rec['step_ms_avg']:.1f} p95={rec['step_ms_p95']:.1f}")
 
+    env.close()
     n_succ = sum(1 for r in rollouts if r["success"])
     out = {
         "suite": args.suite, "task_id": args.task_id,
