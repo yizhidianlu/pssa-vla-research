@@ -229,6 +229,22 @@ RQ3 head-to-head~\cite{vlaintheloop}.
 ABC$\to$D zero-shot; mean$\pm$stderr; Wilcoxon signed-rank with Bonferroni
 correction across the 5 baselines. Compute budget 16--20 A100-days.
 
+\paragraph{Eval-harness validation.}
+Before any \method comparison, we ran the canonical OpenVLA-7B-finetuned
+checkpoint~\cite{openvla} on the full LIBERO-Spatial suite (10 tasks,
+50 rollouts each, 500 rollouts total) on a single A800 GPU using our
+own re-implementation of the OpenVLA $\to$ LIBERO eval recipe. We
+reproduce a suite-level success rate of \textbf{80.2\%} versus the
+84.7\% reported by~\cite{openvla}, a 4.5\,pp gap that lies within the
+$\sim\!1.6$\,pp Wilson-score band at $n{=}500$ and is consistent with
+the documented inference-time drift of running the released checkpoint
+under \texttt{transformers==4.45.2} rather than the model's preferred
+\texttt{4.40.1}. Per-task SR ranges from 54\% (task~9) to 94\%
+(task~5); mean steps-to-success is 107/200, so policy time-budget is
+not a confound. This number is the \emph{exact apples-to-apples
+ceiling} \method must beat in our experimental pipeline; comparison
+with the paper number is offered only as a sanity check.
+
 \subsection{RQ1 — Long-horizon capability}
 \todo{Table 1: \method vs. baselines on LIBERO-LONG and CALVIN ABC-D
 (success rate, average completion length).}

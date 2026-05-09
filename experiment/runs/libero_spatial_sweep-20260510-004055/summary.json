@@ -1,0 +1,122 @@
+{
+  "suite": "libero_spatial",
+  "model_id": "openvla/openvla-7b-finetuned-libero-spatial",
+  "n_tasks": 10,
+  "rollouts_per_task": 50,
+  "overall_success_rate": 0.802,
+  "n_success_total": 401,
+  "n_rollouts_total": 500,
+  "mean_steps_to_success_overall": 107.06234413965088,
+  "tasks": [
+    {
+      "task_id": 0,
+      "task_name": "pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate",
+      "task_language": "pick up the black bowl between the plate and the ramekin and place it on the plate",
+      "n_rollouts": 50,
+      "n_success": 43,
+      "success_rate": 0.86,
+      "mean_steps_succ": 79.76744186046511,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 189.26911369187374
+    },
+    {
+      "task_id": 1,
+      "task_name": "pick_up_the_black_bowl_next_to_the_ramekin_and_place_it_on_the_plate",
+      "task_language": "pick up the black bowl next to the ramekin and place it on the plate",
+      "n_rollouts": 50,
+      "n_success": 41,
+      "success_rate": 0.82,
+      "mean_steps_succ": 117.07317073170732,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 189.06343103993888
+    },
+    {
+      "task_id": 2,
+      "task_name": "pick_up_the_black_bowl_from_table_center_and_place_it_on_the_plate",
+      "task_language": "pick up the black bowl from table center and place it on the plate",
+      "n_rollouts": 50,
+      "n_success": 45,
+      "success_rate": 0.9,
+      "mean_steps_succ": 104.5111111111111,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 188.1118022024188
+    },
+    {
+      "task_id": 3,
+      "task_name": "pick_up_the_black_bowl_on_the_cookie_box_and_place_it_on_the_plate",
+      "task_language": "pick up the black bowl on the cookie box and place it on the plate",
+      "n_rollouts": 50,
+      "n_success": 42,
+      "success_rate": 0.84,
+      "mean_steps_succ": 90.88095238095238,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 189.36754804681757
+    },
+    {
+      "task_id": 4,
+      "task_name": "pick_up_the_black_bowl_in_the_top_drawer_of_the_wooden_cabinet_and_place_it_on_the_plate",
+      "task_language": "pick up the black bowl in the top drawer of the wooden cabinet and place it on the plate",
+      "n_rollouts": 50,
+      "n_success": 34,
+      "success_rate": 0.68,
+      "mean_steps_succ": 126.73529411764706,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 195.31303118201214
+    },
+    {
+      "task_id": 5,
+      "task_name": "pick_up_the_black_bowl_on_the_ramekin_and_place_it_on_the_plate",
+      "task_language": "pick up the black bowl on the ramekin and place it on the plate",
+      "n_rollouts": 50,
+      "n_success": 47,
+      "success_rate": 0.94,
+      "mean_steps_succ": 95.44680851063829,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 188.4247178303901
+    },
+    {
+      "task_id": 6,
+      "task_name": "pick_up_the_black_bowl_next_to_the_cookie_box_and_place_it_on_the_plate",
+      "task_language": "pick up the black bowl next to the cookie box and place it on the plate",
+      "n_rollouts": 50,
+      "n_success": 46,
+      "success_rate": 0.92,
+      "mean_steps_succ": 111.43478260869566,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 190.31859634915966
+    },
+    {
+      "task_id": 7,
+      "task_name": "pick_up_the_black_bowl_on_the_stove_and_place_it_on_the_plate",
+      "task_language": "pick up the black bowl on the stove and place it on the plate",
+      "n_rollouts": 50,
+      "n_success": 37,
+      "success_rate": 0.74,
+      "mean_steps_succ": 129.1891891891892,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 190.49278449151961
+    },
+    {
+      "task_id": 8,
+      "task_name": "pick_up_the_black_bowl_next_to_the_plate_and_place_it_on_the_plate",
+      "task_language": "pick up the black bowl next to the plate and place it on the plate",
+      "n_rollouts": 50,
+      "n_success": 39,
+      "success_rate": 0.78,
+      "mean_steps_succ": 100.12820512820512,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 194.33352053181216
+    },
+    {
+      "task_id": 9,
+      "task_name": "pick_up_the_black_bowl_on_the_wooden_cabinet_and_place_it_on_the_plate",
+      "task_language": "pick up the black bowl on the wooden cabinet and place it on the plate",
+      "n_rollouts": 50,
+      "n_success": 27,
+      "success_rate": 0.54,
+      "mean_steps_succ": 132.44444444444446,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 189.94841963143088
+    }
+  ]
+}

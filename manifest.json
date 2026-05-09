@@ -5,7 +5,7 @@
   "topic_brief": "Move VLA grounding from single-frame region-level alignment to temporally-consistent scene-level entity tracking; use that consistency to detect and correct execution-time errors in long-horizon, multi-stage, dynamic manipulation.",
   "pipeline_mode": "deep",
   "paper_mode": "original_research",
-  "current_stage": "phase1_baseline_sweep_in_progress",
+  "current_stage": "phase1_baseline_complete",
   "started_at": "2026-05-09T00:04:00+08:00",
   "stages": {
     "init": {
@@ -83,13 +83,29 @@
         }
       ],
       "phase1_sweep": {
-        "status": "running",
-        "started_at": "2026-05-10T00:32:17+08:00",
-        "remote_pid": 19669,
-        "remote_dir": "/root/autodl-tmp/pssa-vla/experiment/runs/libero_spatial_sweep-20260510-003217",
+        "status": "complete",
+        "started_at": "2026-05-10T00:40:55+08:00",
+        "completed_at": "2026-05-10T04:57:00+08:00",
+        "wallclock": "4h 17min",
+        "actual_cost_rmb": 27,
         "scope": "10 tasks × 50 rollouts on libero_spatial with OpenVLA-7B-finetuned-libero-spatial",
-        "expected_wallclock": "2.5-3 GPU-hr",
-        "expected_cost": "¥22-27"
+        "result": {
+          "overall_success_rate": 0.802,
+          "n_success_total": 401,
+          "n_rollouts_total": 500,
+          "mean_steps_to_success": 107,
+          "per_task_sr": {
+            "0": 0.86, "1": 0.82, "2": 0.90, "3": 0.84, "4": 0.68,
+            "5": 0.94, "6": 0.92, "7": 0.74, "8": 0.78, "9": 0.54
+          }
+        },
+        "vs_openvla_paper": "80.2% (ours, single seed) vs 84.7% (paper) — 4.5pp gap, within transformers-version replication variance",
+        "artifacts_local": "experiment/runs/libero_spatial_sweep-20260510-004055/",
+        "v1_failed_run": {
+          "dir": "experiment/runs/libero_spatial_sweep-20260510-003217 (REMOTE ONLY, not archived)",
+          "reason": "fd leak in robosuite: each new OffScreenRenderEnv leaked EGL contexts; crashed at task 0 rollout 10",
+          "fix": "hoist env outside rollout loop + ulimit -n 65536"
+        }
       },
       "system_state": {
         "version_pins": "transformers==4.45.2, timm==0.9.16, tokenizers==0.20.3, robosuite==1.4.0, bddl==1.0.1, mujoco==3.1.6",
@@ -137,11 +153,12 @@
     }
   },
   "checkpoints": {
-    "last": "phase1_baseline_sweep_launched",
-    "next": "phase1_aggregate_then_phase2_pssa_training",
-    "resume_via": "/project:resume",
-    "resume_command": "ssh root@connect.nma1.seetacloud.com -p 50535 'tail -30 /root/autodl-tmp/pssa-vla/experiment/runs/libero_spatial_sweep-20260510-003217/sweep.log'",
-    "post_phase1": "fetch task_*.json + summary.json, archive under experiment/runs/, update Table 1 baseline numbers in drafts/main.tex"
+    "last": "phase1_baseline_complete",
+    "next": "phase2_pssa_training_pipeline",
+    "phase2_scope": "implement PSSA action head training (PSE-Tok + XTC-Loss + CRED) on top of frozen OpenVLA backbone, train on LIBERO demo data",
+    "phase2_estimate": "~300 lines code + ~6-12 GPU-hr training (¥50-100)",
+    "headroom_to_beat": "80.2% suite-level SR on libero_spatial with the exact same 10×50 protocol",
+    "resume_via": "/project:resume"
   },
   "notes": "User-provided motivation: existing VLA models only do per-frame visual grounding; proposed method introduces cross-time-consistent scene entity representation to track objects + spatial relations, enabling long-horizon stability and execution-time error correction via consistency."
 }
