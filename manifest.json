@@ -5,7 +5,7 @@
   "topic_brief": "Move VLA grounding from single-frame region-level alignment to temporally-consistent scene-level entity tracking; use that consistency to detect and correct execution-time errors in long-horizon, multi-stage, dynamic manipulation.",
   "pipeline_mode": "deep",
   "paper_mode": "original_research",
-  "current_stage": "phase1_baseline_complete",
+  "current_stage": "phase1_baseline_4suites_complete",
   "started_at": "2026-05-09T00:04:00+08:00",
   "stages": {
     "init": {
@@ -83,20 +83,29 @@
         }
       ],
       "phase1_sweep": {
-        "status": "complete",
+        "status": "complete (Spatial + Object + Goal); LONG partial (8/10)",
         "started_at": "2026-05-10T00:40:55+08:00",
-        "completed_at": "2026-05-10T04:57:00+08:00",
-        "wallclock": "4h 17min",
-        "actual_cost_rmb": 27,
-        "scope": "10 tasks × 50 rollouts on libero_spatial with OpenVLA-7B-finetuned-libero-spatial",
+        "completed_at": "2026-05-11T07:30:00+08:00",
+        "wallclock": "Spatial 4h17m, Object+Goal 6h (dual A800 with isolation), LONG ~16h",
+        "actual_cost_rmb": "Spatial 27 + LONG ~135 + Obj+Goal ~110 + dual setup 60 = ~330",
+        "scope": "10 tasks × 50 rollouts × 4 suites (Spatial, Object, Goal, LONG) with OpenVLA-7B-finetuned ckpts",
         "result": {
-          "overall_success_rate": 0.802,
-          "n_success_total": 401,
-          "n_rollouts_total": 500,
-          "mean_steps_to_success": 107,
-          "per_task_sr": {
-            "0": 0.86, "1": 0.82, "2": 0.90, "3": 0.84, "4": 0.68,
-            "5": 0.94, "6": 0.92, "7": 0.74, "8": 0.78, "9": 0.54
+          "libero_spatial": {
+            "overall_success_rate": 0.802, "n_success": 401, "n_rollouts": 500,
+            "per_task_sr": {"0": 0.86, "1": 0.82, "2": 0.90, "3": 0.84, "4": 0.68, "5": 0.94, "6": 0.92, "7": 0.74, "8": 0.78, "9": 0.54}
+          },
+          "libero_object": {
+            "overall_success_rate": 0.800, "n_success": 400, "n_rollouts": 500,
+            "per_task_sr": {"0": 0.64, "1": 0.66, "2": 0.84, "3": 0.60, "4": 0.88, "5": 0.84, "6": 0.90, "7": 0.82, "8": 0.88, "9": 0.94}
+          },
+          "libero_goal": {
+            "overall_success_rate": 0.728, "n_success": 364, "n_rollouts": 500,
+            "per_task_sr": {"0": 0.62, "1": 0.86, "2": 0.90, "3": 0.26, "4": 0.80, "5": 0.80, "6": 0.64, "7": 0.96, "8": 0.88, "9": 0.56}
+          },
+          "libero_long": {
+            "status": "partial — 8/10 tasks done (task 8+9 lost when old A800 process died)",
+            "overall_success_rate_partial": 0.4675, "n_success": 187, "n_rollouts_partial": 400,
+            "per_task_sr": {"0": 0.52, "1": 0.64, "2": 0.48, "3": 0.22, "4": 0.34, "5": 0.78, "6": 0.34, "7": 0.52}
           }
         },
         "vs_openvla_paper": "80.2% (ours, single seed) vs 84.7% (paper) — 4.5pp gap, within transformers-version replication variance",

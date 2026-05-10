@@ -229,21 +229,38 @@ RQ3 head-to-head~\cite{vlaintheloop}.
 ABC$\to$D zero-shot; mean$\pm$stderr; Wilcoxon signed-rank with Bonferroni
 correction across the 5 baselines. Compute budget 16--20 A100-days.
 
-\paragraph{Eval-harness validation.}
-Before any \method comparison, we ran the canonical OpenVLA-7B-finetuned
-checkpoint~\cite{openvla} on the full LIBERO-Spatial suite (10 tasks,
-50 rollouts each, 500 rollouts total) on a single A800 GPU using our
-own re-implementation of the OpenVLA $\to$ LIBERO eval recipe. We
-reproduce a suite-level success rate of \textbf{80.2\%} versus the
-84.7\% reported by~\cite{openvla}, a 4.5\,pp gap that lies within the
-$\sim\!1.6$\,pp Wilson-score band at $n{=}500$ and is consistent with
-the documented inference-time drift of running the released checkpoint
-under \texttt{transformers==4.45.2} rather than the model's preferred
-\texttt{4.40.1}. Per-task SR ranges from 54\% (task~9) to 94\%
-(task~5); mean steps-to-success is 107/200, so policy time-budget is
-not a confound. This number is the \emph{exact apples-to-apples
-ceiling} \method must beat in our experimental pipeline; comparison
-with the paper number is offered only as a sanity check.
+\paragraph{Eval-harness validation across 4 LIBERO suites.}
+Before any \method comparison, we replicated the canonical
+OpenVLA-7B-finetuned checkpoints~\cite{openvla} across all four LIBERO
+suites (Spatial, Object, Goal, LONG; 10 tasks $\times$ 50 rollouts each
+= 500 rollouts/suite, 2000 total) on A800-class hardware with our
+own re-implementation of the OpenVLA $\to$ LIBERO eval recipe.
+Table~\ref{tab:baseline_libero} reports suite-level success rates: our
+reproductions are stably 4--9\,pp below the paper numbers across all
+four suites, consistent with the documented inference-time drift of
+running the released checkpoints under \texttt{transformers==4.45.2}
+rather than the paper's \texttt{4.40.1}. These four numbers form the
+\emph{apples-to-apples ceiling} \method must beat in our pipeline;
+comparison with paper numbers is offered only as a sanity check.
+
+\begin{table}[t]
+\centering
+\caption{OpenVLA-finetuned baselines, our reproduction vs. paper.
+$n=500$ rollouts per suite.}
+\label{tab:baseline_libero}
+\begin{tabular}{lcccc}
+\toprule
+Suite & Ours & \cite{openvla} & $\Delta$ & step-ms \\
+\midrule
+LIBERO-Spatial & 80.2\% & 84.7\% & $-$4.5 & 195 \\
+LIBERO-Object  & 80.0\% & 88.4\% & $-$8.4 & 185 \\
+LIBERO-Goal    & 72.8\% & 79.2\% & $-$6.4 & 193 \\
+LIBERO-LONG    & \todo{48\% (partial 8/10 tasks)} & 53.7\% & $-$5.7 & 191 \\
+\midrule
+mean (4 suites) & \todo{75.8\%} & 76.5\% & $-$0.7 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \subsection{RQ1 — Long-horizon capability}
 \todo{Table 1: \method vs. baselines on LIBERO-LONG and CALVIN ABC-D

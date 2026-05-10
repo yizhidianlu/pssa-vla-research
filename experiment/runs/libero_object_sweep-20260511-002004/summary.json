@@ -1,0 +1,122 @@
+{
+  "suite": "libero_spatial",
+  "model_id": "openvla/openvla-7b-finetuned-libero-object",
+  "n_tasks": 10,
+  "rollouts_per_task": 50,
+  "overall_success_rate": 0.8,
+  "n_success_total": 400,
+  "n_rollouts_total": 500,
+  "mean_steps_to_success_overall": 142.1825,
+  "tasks": [
+    {
+      "task_id": 0,
+      "task_name": "pick_up_the_alphabet_soup_and_place_it_in_the_basket",
+      "task_language": "pick up the alphabet soup and place it in the basket",
+      "n_rollouts": 50,
+      "n_success": 32,
+      "success_rate": 0.64,
+      "mean_steps_succ": 153.46875,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 189.12459549359866
+    },
+    {
+      "task_id": 1,
+      "task_name": "pick_up_the_cream_cheese_and_place_it_in_the_basket",
+      "task_language": "pick up the cream cheese and place it in the basket",
+      "n_rollouts": 50,
+      "n_success": 33,
+      "success_rate": 0.66,
+      "mean_steps_succ": 135.24242424242425,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 189.97714204350348
+    },
+    {
+      "task_id": 2,
+      "task_name": "pick_up_the_salad_dressing_and_place_it_in_the_basket",
+      "task_language": "pick up the salad dressing and place it in the basket",
+      "n_rollouts": 50,
+      "n_success": 42,
+      "success_rate": 0.84,
+      "mean_steps_succ": 124.30952380952381,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 186.48367263512378
+    },
+    {
+      "task_id": 3,
+      "task_name": "pick_up_the_bbq_sauce_and_place_it_in_the_basket",
+      "task_language": "pick up the bbq sauce and place it in the basket",
+      "n_rollouts": 50,
+      "n_success": 30,
+      "success_rate": 0.6,
+      "mean_steps_succ": 132.5,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 184.23324913909767
+    },
+    {
+      "task_id": 4,
+      "task_name": "pick_up_the_ketchup_and_place_it_in_the_basket",
+      "task_language": "pick up the ketchup and place it in the basket",
+      "n_rollouts": 50,
+      "n_success": 44,
+      "success_rate": 0.88,
+      "mean_steps_succ": 153.9090909090909,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 183.36259574431278
+    },
+    {
+      "task_id": 5,
+      "task_name": "pick_up_the_tomato_sauce_and_place_it_in_the_basket",
+      "task_language": "pick up the tomato sauce and place it in the basket",
+      "n_rollouts": 50,
+      "n_success": 42,
+      "success_rate": 0.84,
+      "mean_steps_succ": 146.92857142857142,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 183.03739351860094
+    },
+    {
+      "task_id": 6,
+      "task_name": "pick_up_the_butter_and_place_it_in_the_basket",
+      "task_language": "pick up the butter and place it in the basket",
+      "n_rollouts": 50,
+      "n_success": 45,
+      "success_rate": 0.9,
+      "mean_steps_succ": 151.93333333333334,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 185.57745096105626
+    },
+    {
+      "task_id": 7,
+      "task_name": "pick_up_the_milk_and_place_it_in_the_basket",
+      "task_language": "pick up the milk and place it in the basket",
+      "n_rollouts": 50,
+      "n_success": 41,
+      "success_rate": 0.82,
+      "mean_steps_succ": 137.21951219512195,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 183.55568578302396
+    },
+    {
+      "task_id": 8,
+      "task_name": "pick_up_the_chocolate_pudding_and_place_it_in_the_basket",
+      "task_language": "pick up the chocolate pudding and place it in the basket",
+      "n_rollouts": 50,
+      "n_success": 44,
+      "success_rate": 0.88,
+      "mean_steps_succ": 157.11363636363637,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 182.2923318109418
+    },
+    {
+      "task_id": 9,
+      "task_name": "pick_up_the_orange_juice_and_place_it_in_the_basket",
+      "task_language": "pick up the orange juice and place it in the basket",
+      "n_rollouts": 50,
+      "n_success": 47,
+      "success_rate": 0.94,
+      "mean_steps_succ": 127.31914893617021,
+      "mean_steps_fail": 200,
+      "step_ms_avg": 184.2677648804635
+    }
+  ]
+}
