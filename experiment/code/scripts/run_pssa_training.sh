@@ -13,6 +13,9 @@ source /root/autodl-tmp/.hf_env
 
 cd /root/autodl-tmp/pssa-vla
 
+# pssa package lives at experiment/code/pssa/, not at repo root
+export PYTHONPATH="$PWD/experiment/code:${PYTHONPATH:-}"
+
 USE_FSDP="${USE_FSDP:-0}"
 EXTRA_ARGS=("$@")
 
