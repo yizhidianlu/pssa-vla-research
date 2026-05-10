@@ -160,11 +160,13 @@ class PSSAVLAv2(nn.Module):
         loss_action = rgb_seq.new_zeros(())
         entity_seq = []
         for t in range(T):
-            # Re-encode entity features from current frame for XTC
-            with torch.no_grad():
-                ent_t = self.pse_encoder(
-                    rgb_seq[:, t:t+1], masks_init[:, :1].expand(-1, 1, -1, -1, -1)
-                )
+            # Re-encode entity features from current frame for XTC.
+            # Keep gradient flowing through pse_encoder so XTC loss trains it
+            # (in v0, XTC is the only training signal since _step_action_logits
+            # raises NotImplementedError).
+            ent_t = self.pse_encoder(
+                rgb_seq[:, t:t+1], masks_init[:, :1].expand(-1, 1, -1, -1, -1)
+            )
             entity_seq.append(ent_t)
             # NB: real OpenVLA forward with PSE prefix injection requires a
             # PEFT/transformers integration that's beyond this v0 scaffold.
