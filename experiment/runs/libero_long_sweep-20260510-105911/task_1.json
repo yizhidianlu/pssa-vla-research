@@ -1,0 +1,413 @@
+{
+  "suite": "libero_10",
+  "task_id": 1,
+  "task_name": "LIVING_ROOM_SCENE2_put_both_the_cream_cheese_box_and_the_butter_in_the_basket",
+  "task_language": "put both the cream cheese box and the butter in the basket",
+  "model_id": "openvla/openvla-7b-finetuned-libero-10",
+  "unnorm_key": "libero_10",
+  "n_rollouts": 50,
+  "n_success": 32,
+  "success_rate": 0.64,
+  "rollouts": [
+    {
+      "rollout": 0,
+      "success": true,
+      "steps": 253,
+      "step_ms_avg": 191.059126684317,
+      "step_ms_p95": 200.25191307067865,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 1,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 188.27446579933167,
+      "step_ms_p95": 197.97234535217285,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 2,
+      "success": true,
+      "steps": 219,
+      "step_ms_avg": 184.7787730770024,
+      "step_ms_p95": 187.83364295959473,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 3,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 186.8709433078766,
+      "step_ms_p95": 194.13728713989258,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 4,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 185.51819006601968,
+      "step_ms_p95": 192.46150255203247,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 5,
+      "success": true,
+      "steps": 230,
+      "step_ms_avg": 187.52447936845863,
+      "step_ms_p95": 196.8993782997131,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 6,
+      "success": true,
+      "steps": 323,
+      "step_ms_avg": 187.1569503571596,
+      "step_ms_p95": 193.12803745269775,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 7,
+      "success": true,
+      "steps": 258,
+      "step_ms_avg": 187.971083692802,
+      "step_ms_p95": 192.30908155441284,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 8,
+      "success": true,
+      "steps": 238,
+      "step_ms_avg": 186.67696003152543,
+      "step_ms_p95": 192.44297742843625,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 9,
+      "success": true,
+      "steps": 294,
+      "step_ms_avg": 187.99723492187707,
+      "step_ms_p95": 195.78545093536377,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 10,
+      "success": true,
+      "steps": 270,
+      "step_ms_avg": 184.60207868505407,
+      "step_ms_p95": 188.3779525756836,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 11,
+      "success": true,
+      "steps": 428,
+      "step_ms_avg": 186.01529341991818,
+      "step_ms_p95": 191.99565649032593,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 12,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 186.55167937278748,
+      "step_ms_p95": 192.38572120666504,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 13,
+      "success": true,
+      "steps": 249,
+      "step_ms_avg": 188.42836173183946,
+      "step_ms_p95": 195.14288902282715,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 14,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 184.7653329372406,
+      "step_ms_p95": 190.53310155868527,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 15,
+      "success": true,
+      "steps": 257,
+      "step_ms_avg": 183.4113180405435,
+      "step_ms_p95": 185.24785041809082,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 16,
+      "success": true,
+      "steps": 394,
+      "step_ms_avg": 184.14197355357524,
+      "step_ms_p95": 187.88410425186157,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 17,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 183.64368398984274,
+      "step_ms_p95": 188.23033571243286,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 18,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 183.75904122988382,
+      "step_ms_p95": 189.1550064086914,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 19,
+      "success": true,
+      "steps": 263,
+      "step_ms_avg": 183.2499404370558,
+      "step_ms_p95": 187.00575828552246,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 20,
+      "success": true,
+      "steps": 276,
+      "step_ms_avg": 183.0624981202941,
+      "step_ms_p95": 185.31030416488647,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 21,
+      "success": true,
+      "steps": 318,
+      "step_ms_avg": 185.9377420173501,
+      "step_ms_p95": 190.9511089324951,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 22,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 185.54333130518594,
+      "step_ms_p95": 191.75459146499634,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 23,
+      "success": true,
+      "steps": 260,
+      "step_ms_avg": 185.29943227767944,
+      "step_ms_p95": 189.3535852432251,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 24,
+      "success": true,
+      "steps": 248,
+      "step_ms_avg": 186.26999182085837,
+      "step_ms_p95": 187.4930739402771,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 25,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 186.21878266334534,
+      "step_ms_p95": 192.84602403640747,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 26,
+      "success": true,
+      "steps": 245,
+      "step_ms_avg": 183.84626544251734,
+      "step_ms_p95": 186.19675636291504,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 27,
+      "success": true,
+      "steps": 250,
+      "step_ms_avg": 185.32923889160156,
+      "step_ms_p95": 192.2672986984253,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 28,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 184.6910560131073,
+      "step_ms_p95": 188.96961212158203,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 29,
+      "success": true,
+      "steps": 266,
+      "step_ms_avg": 185.02378732638252,
+      "step_ms_p95": 188.18968534469604,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 30,
+      "success": true,
+      "steps": 314,
+      "step_ms_avg": 186.17260683873656,
+      "step_ms_p95": 192.7397608757019,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 31,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 183.19569865862528,
+      "step_ms_p95": 185.6624960899353,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 32,
+      "success": true,
+      "steps": 292,
+      "step_ms_avg": 184.41228915567268,
+      "step_ms_p95": 188.01501989364624,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 33,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 185.91105699539185,
+      "step_ms_p95": 192.32183694839478,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 34,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 184.24734393755594,
+      "step_ms_p95": 188.58481645584106,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 35,
+      "success": true,
+      "steps": 249,
+      "step_ms_avg": 186.5047872305874,
+      "step_ms_p95": 191.95022583007812,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 36,
+      "success": true,
+      "steps": 256,
+      "step_ms_avg": 183.3476535975933,
+      "step_ms_p95": 184.7519874572754,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 37,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 184.59768931070963,
+      "step_ms_p95": 190.95876216888428,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 38,
+      "success": true,
+      "steps": 227,
+      "step_ms_avg": 187.3688645299836,
+      "step_ms_p95": 195.15786170959473,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 39,
+      "success": true,
+      "steps": 571,
+      "step_ms_avg": 184.73757586838278,
+      "step_ms_p95": 187.83748149871826,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 40,
+      "success": true,
+      "steps": 238,
+      "step_ms_avg": 183.6500147811505,
+      "step_ms_p95": 185.06503105163574,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 41,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 183.10523947079977,
+      "step_ms_p95": 184.51757431030273,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 42,
+      "success": true,
+      "steps": 225,
+      "step_ms_avg": 184.74431885613336,
+      "step_ms_p95": 190.869665145874,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 43,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 183.98267269134521,
+      "step_ms_p95": 187.74197101593018,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 44,
+      "success": true,
+      "steps": 271,
+      "step_ms_avg": 183.8100466780997,
+      "step_ms_p95": 186.2497329711914,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 45,
+      "success": true,
+      "steps": 330,
+      "step_ms_avg": 184.64554367643413,
+      "step_ms_p95": 191.64000749588013,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 46,
+      "success": true,
+      "steps": 248,
+      "step_ms_avg": 183.06959444476712,
+      "step_ms_p95": 186.9143843650818,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 47,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 185.5207637945811,
+      "step_ms_p95": 191.596257686615,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 48,
+      "success": false,
+      "steps": 600,
+      "step_ms_avg": 185.58319449424744,
+      "step_ms_p95": 190.74177742004395,
+      "peak_vram_gb": 15.443581952
+    },
+    {
+      "rollout": 49,
+      "success": true,
+      "steps": 263,
+      "step_ms_avg": 185.3970873945113,
+      "step_ms_p95": 193.03977489471436,
+      "peak_vram_gb": 15.443581952
+    }
+  ]
+}

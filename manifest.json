@@ -103,9 +103,9 @@
             "per_task_sr": {"0": 0.62, "1": 0.86, "2": 0.90, "3": 0.26, "4": 0.80, "5": 0.80, "6": 0.64, "7": 0.96, "8": 0.88, "9": 0.56}
           },
           "libero_long": {
-            "status": "partial — 8/10 tasks done (task 8+9 lost when old A800 process died)",
-            "overall_success_rate_partial": 0.4675, "n_success": 187, "n_rollouts_partial": 400,
-            "per_task_sr": {"0": 0.52, "1": 0.64, "2": 0.48, "3": 0.22, "4": 0.34, "5": 0.78, "6": 0.34, "7": 0.52}
+            "status": "complete — task 8+9 re-run after old A800 crash",
+            "overall_success_rate": 0.458, "n_success": 229, "n_rollouts": 500,
+            "per_task_sr": {"0": 0.52, "1": 0.64, "2": 0.48, "3": 0.22, "4": 0.34, "5": 0.78, "6": 0.34, "7": 0.52, "8": 0.42, "9": 0.32}
           }
         },
         "vs_openvla_paper": "80.2% (ours, single seed) vs 84.7% (paper) — 4.5pp gap, within transformers-version replication variance",
