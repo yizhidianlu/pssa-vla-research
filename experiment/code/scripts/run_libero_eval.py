@@ -49,6 +49,8 @@ def main() -> None:
     ap.add_argument("--libero-image-fix", action="store_true",
                     help="apply rgb[::-1, ::-1] (double flip / 180° rotate) "
                          "matching OpenVLA's official LIBERO image preprocessing")
+    ap.add_argument("--device", default="cuda:0",
+                    help="GPU device for model + inputs (e.g. cuda:0 / cuda:1)")
     args = ap.parse_args()
 
     from libero.libero import benchmark, get_libero_path
@@ -71,7 +73,7 @@ def main() -> None:
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
         low_cpu_mem_usage=True,
-        device_map="cuda:0",
+        device_map=args.device,
     ).eval()
     print(f"    loaded in {time.time()-t0:.1f}s")
     # Probe available unnorm keys so we can verify args.unnorm_key matches
@@ -121,7 +123,7 @@ def main() -> None:
             pil = Image.fromarray(rgb.astype(np.uint8))
             prompt = (f"In: What action should the robot take to "
                       f"{task.language.strip().lower()}?\nOut:")
-            inputs = proc(prompt, pil).to("cuda:0", dtype=torch.bfloat16)
+            inputs = proc(prompt, pil).to(args.device, dtype=torch.bfloat16)
             s_t0 = time.time()
             with torch.no_grad():
                 action = model.predict_action(**inputs,

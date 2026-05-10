@@ -21,16 +21,20 @@ SUITE="${LIBERO_SUITE:-libero_spatial}"
 MODEL_ID="${LIBERO_MODEL_ID:-openvla/openvla-7b-finetuned-libero-spatial}"
 UNNORM_KEY="${LIBERO_UNNORM_KEY:-libero_spatial}"
 MAX_STEPS="${LIBERO_MAX_STEPS:-200}"
+TASK_IDS="${LIBERO_TASK_IDS:-0 1 2 3 4 5 6 7 8 9}"
+DEVICE="${LIBERO_DEVICE:-cuda:0}"
 mkdir -p "$OUT"
 echo "==> sweep out: $OUT"
 echo "==> suite:    $SUITE"
 echo "==> model:    $MODEL_ID"
 echo "==> unnorm:   $UNNORM_KEY"
+echo "==> task ids: $TASK_IDS"
+echo "==> device:   $DEVICE"
 echo "==> rollouts/task: $N_ROLLOUTS"
 echo "==> max steps:     $MAX_STEPS"
 
 START_TS=$(date +%s)
-for TID in 0 1 2 3 4 5 6 7 8 9; do
+for TID in $TASK_IDS; do
     TASK_OUT="$OUT/task_${TID}.json"
     if [ -f "$TASK_OUT" ]; then
         echo "==> task $TID already done — skip"
@@ -42,6 +46,7 @@ for TID in 0 1 2 3 4 5 6 7 8 9; do
         --rollouts "$N_ROLLOUTS" --max-steps "$MAX_STEPS" \
         --model-id "$MODEL_ID" \
         --unnorm-key "$UNNORM_KEY" \
+        --device "$DEVICE" \
         --libero-action-fix --libero-image-fix \
         --out "$TASK_OUT"
     DONE_TS=$(date +%s)
