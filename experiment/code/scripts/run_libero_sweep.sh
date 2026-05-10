@@ -16,8 +16,15 @@ source /root/autodl-tmp/.hf_env
 
 OUT="${1:?usage: run_libero_sweep.sh <out_dir> [n_rollouts]}"
 N_ROLLOUTS="${2:-50}"
+# All three default to libero_spatial; override via env vars for LIBERO-LONG / Goal / Object
+SUITE="${LIBERO_SUITE:-libero_spatial}"
+MODEL_ID="${LIBERO_MODEL_ID:-openvla/openvla-7b-finetuned-libero-spatial}"
+UNNORM_KEY="${LIBERO_UNNORM_KEY:-libero_spatial}"
 mkdir -p "$OUT"
 echo "==> sweep out: $OUT"
+echo "==> suite:    $SUITE"
+echo "==> model:    $MODEL_ID"
+echo "==> unnorm:   $UNNORM_KEY"
 echo "==> rollouts/task: $N_ROLLOUTS"
 
 START_TS=$(date +%s)
@@ -29,10 +36,10 @@ for TID in 0 1 2 3 4 5 6 7 8 9; do
     fi
     echo "==> task $TID starting at $(date +%H:%M:%S)"
     python experiment/code/scripts/run_libero_eval.py \
-        --suite libero_spatial --task-id "$TID" \
+        --suite "$SUITE" --task-id "$TID" \
         --rollouts "$N_ROLLOUTS" --max-steps 200 \
-        --model-id openvla/openvla-7b-finetuned-libero-spatial \
-        --unnorm-key libero_spatial \
+        --model-id "$MODEL_ID" \
+        --unnorm-key "$UNNORM_KEY" \
         --libero-action-fix --libero-image-fix \
         --out "$TASK_OUT"
     DONE_TS=$(date +%s)
