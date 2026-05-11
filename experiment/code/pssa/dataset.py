@@ -101,7 +101,18 @@ class LIBEROEpisodeDataset(IterableDataset):
     # ----- iterator -------------------------------------------------------
     def __iter__(self) -> Iterator[dict[str, torch.Tensor | str]]:
         worker = torch.utils.data.get_worker_info()
-        rng = random.Random(self._seed if worker is None else (self._seed or 0) + worker.id)
+        # Combine DDP rank + worker id so each (rank, worker) sees a unique
+        # random stream — otherwise dual-GPU sees identical batches and the
+        # second GPU does redundant work.
+        try:
+            import torch.distributed as dist
+            rank = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
+            world = dist.get_world_size() if dist.is_available() and dist.is_initialized() else 1
+        except Exception:
+            rank, world = 0, 1
+        worker_id = worker.id if worker is not None else 0
+        seed = (self._seed or 0) + rank * 1_000 + worker_id
+        rng = random.Random(seed)
         while True:
             task_h5 = rng.choice(self._task_files)
             try:
