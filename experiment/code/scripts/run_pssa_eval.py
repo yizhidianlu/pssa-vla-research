@@ -55,6 +55,12 @@ def main() -> None:
     ap.add_argument("--pse-position", default="after_image",
                     choices=["after_image", "before_action"])
     ap.add_argument("--backbone-id", default="openvla/openvla-7b-finetuned-libero-spatial")
+    ap.add_argument("--libero-action-fix", action="store_true", default=True,
+                    help="apply OpenVLA->LIBERO gripper convention fix "
+                         "(action[-1] = -sign(2*x - 1)); ON by default — "
+                         "Phase 1's run_libero_eval.py used this to reach 80.2%")
+    ap.add_argument("--no-libero-action-fix", dest="libero_action_fix",
+                    action="store_false")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
@@ -164,6 +170,10 @@ def main() -> None:
             )
             torch.cuda.synchronize()
             per_step_ms.append((time.time() - s_t0) * 1000)
+            # Phase 1 gripper convention fix (OpenVLA close-1 -> LIBERO open-1)
+            if args.libero_action_fix:
+                action_np = np.asarray(action_np, dtype=np.float32).copy()
+                action_np[-1] = np.sign(2 * action_np[-1] - 1) * -1.0
             obs, reward, done, info = env.step(action_np.tolist())
             if done:
                 success = bool(info.get("success", reward > 0))
