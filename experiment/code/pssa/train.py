@@ -109,6 +109,8 @@ def main(cfg: DictConfig) -> None:
         pse_encoder=pse_encoder,
         processor=processor,
         lambda_xtc=cfg.model.lambda_xtc,
+        pse_position=cfg.model.get("pse_position", "after_image"),
+        n_pse_tokens=cfg.model.pse.n_entities,
     )
 
     # ----- data -----
@@ -131,8 +133,14 @@ def main(cfg: DictConfig) -> None:
     accelerator.print(f"==> {sum(p.numel() for p in trainable)/1e6:.2f}M trainable params")
     opt = torch.optim.AdamW(trainable, lr=cfg.train.lr,
                             weight_decay=cfg.train.weight_decay)
+    # Compensate for accelerate's per-rank scheduler stepping under DDP:
+    # with N processes, the wrapped scheduler is stepped N times per
+    # data iteration, so we scale T_max to keep the cosine schedule
+    # spanning the full intended number of OPTIMIZER steps.
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(
-        opt, T_max=cfg.train.max_steps, eta_min=cfg.train.lr * 0.1
+        opt,
+        T_max=cfg.train.max_steps * accelerator.num_processes,
+        eta_min=cfg.train.lr * 0.1,
     )
 
     model, opt, train_loader, sched = accelerator.prepare(model, opt, train_loader, sched)

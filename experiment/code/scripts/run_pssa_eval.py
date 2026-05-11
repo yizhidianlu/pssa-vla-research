@@ -37,8 +37,12 @@ sys.path.insert(0, str(ROOT))
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--ckpt", required=True,
-                    help="path to checkpoints/step_XXXXXX/ dir")
+    ap.add_argument("--ckpt", default=None,
+                    help="path to checkpoints/step_XXXXXX/ dir; omit for "
+                         "untrained-baseline mode (Gate 1)")
+    ap.add_argument("--no-load-ckpt", action="store_true",
+                    help="Gate 1: skip LoRA + pssa_modules.pt load; use "
+                         "random PSE init + base OpenVLA only")
     ap.add_argument("--suite", default="libero_spatial")
     ap.add_argument("--task-id", type=int, default=0)
     ap.add_argument("--rollouts", type=int, default=10)
@@ -46,7 +50,10 @@ def main() -> None:
     ap.add_argument("--resolution", type=int, default=128,
                     help="must match training (LIBERO demos are 128x128)")
     ap.add_argument("--n-init-frames", type=int, default=4)
-    ap.add_argument("--n-entities", type=int, default=8)
+    ap.add_argument("--n-entities", type=int, default=8,
+                    help="0 = no-PSE control (skip prefix entirely)")
+    ap.add_argument("--pse-position", default="after_image",
+                    choices=["after_image", "before_action"])
     ap.add_argument("--backbone-id", default="openvla/openvla-7b-finetuned-libero-spatial")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
@@ -57,7 +64,7 @@ def main() -> None:
     from libero.libero import benchmark, get_libero_path
     from libero.libero.envs import OffScreenRenderEnv
 
-    ckpt_dir = Path(args.ckpt)
+    ckpt_dir = Path(args.ckpt) if args.ckpt else None
     device = "cuda:0"
 
     print(f"==> loading backbone {args.backbone_id}")
@@ -70,25 +77,37 @@ def main() -> None:
     for p in backbone.parameters():
         p.requires_grad_(False)
 
-    lora_path = ckpt_dir / "lora"
-    if lora_path.exists():
-        print(f"==> loading LoRA from {lora_path}")
-        backbone = PeftModel.from_pretrained(backbone, str(lora_path))
-        backbone.eval()
+    if not args.no_load_ckpt and ckpt_dir is not None:
+        lora_path = ckpt_dir / "lora"
+        if lora_path.exists():
+            print(f"==> loading LoRA from {lora_path}")
+            backbone = PeftModel.from_pretrained(backbone, str(lora_path))
+            backbone.eval()
+    else:
+        print("==> --no-load-ckpt: skipping LoRA + pssa_modules.pt load "
+              "(Gate-1 untrained-baseline mode)")
 
     cfg = getattr(backbone, "config", None) or backbone.base_model.config
     hidden_dim = getattr(cfg, "hidden_size", 4096)
 
+    # For n_entities=0 (no-PSE control) we still construct the encoder so
+    # the model has a valid pse_encoder.hidden_dim attribute; compute_pse
+    # short-circuits to an empty tensor.
+    pse_n = max(args.n_entities, 1)
     pse = PSEEntityEncoder(
-        n_entities=args.n_entities, hidden_dim=hidden_dim, cnn_dim=256,
+        n_entities=pse_n, hidden_dim=hidden_dim, cnn_dim=256,
     )
-    model = PSSAVLAv2(backbone=backbone, pse_encoder=pse, processor=proc)
-    # C route: only pse_encoder is loaded from ckpt (no action_head).
-    modules_pt = ckpt_dir / "pssa_modules.pt"
-    if not modules_pt.exists():
-        raise FileNotFoundError(f"missing {modules_pt}")
-    state = torch.load(modules_pt, map_location="cpu")
-    model.pse_encoder.load_state_dict(state["pse_encoder"])
+    model = PSSAVLAv2(
+        backbone=backbone, pse_encoder=pse, processor=proc,
+        pse_position=args.pse_position,
+        n_pse_tokens=args.n_entities,
+    )
+    if not args.no_load_ckpt and ckpt_dir is not None:
+        modules_pt = ckpt_dir / "pssa_modules.pt"
+        if not modules_pt.exists():
+            raise FileNotFoundError(f"missing {modules_pt}")
+        state = torch.load(modules_pt, map_location="cpu")
+        model.pse_encoder.load_state_dict(state["pse_encoder"])
     model = model.to(device).eval()
 
     suite = benchmark.get_benchmark_dict()[args.suite]()
@@ -163,10 +182,20 @@ def main() -> None:
 
     env.close()
     n_succ = sum(1 for r in rollouts_data if r["success"])
+    if args.n_entities == 0:
+        model_desc = f"PSSA-VLA v2c (no-PSE control, OpenVLA-correct [BOS|image|text] layout)"
+    else:
+        model_desc = (f"PSSA-VLA v2c (PSE_position={args.pse_position}, "
+                      f"n_entities={args.n_entities}, "
+                      f"{'untrained' if args.no_load_ckpt else 'trained'})")
     out_data = {
         "suite": args.suite, "task_id": args.task_id, "task_name": task.name,
-        "model": "PSSA-VLA v2 Route-C (text+image+PSE prefix, OpenVLA discrete action tokens)",
-        "ckpt": str(ckpt_dir), "backbone_id": args.backbone_id,
+        "model": model_desc,
+        "pse_position": args.pse_position,
+        "n_entities": args.n_entities,
+        "no_load_ckpt": args.no_load_ckpt,
+        "ckpt": str(ckpt_dir) if ckpt_dir else None,
+        "backbone_id": args.backbone_id,
         "n_rollouts": args.rollouts, "n_success": n_succ,
         "success_rate": n_succ / args.rollouts if args.rollouts else 0.0,
         "rollouts": rollouts_data,

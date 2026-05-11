@@ -12,14 +12,15 @@ model:
   id: openvla/openvla-7b-finetuned-libero-spatial
   freeze_backbone: true
   lambda_xtc: 0.1
+  pse_position: after_image   # or before_action
   lora:
     enable: true
     r: 32
     alpha: 64
     dropout: 0.05
   pse:
-    n_entities: 8
-    hidden_dim: 4096       # match LLM hidden
+    n_entities: 8             # 0 = no-PSE control
+    hidden_dim: 4096          # match LLM hidden
     cnn_dim: 256
 
 train:
