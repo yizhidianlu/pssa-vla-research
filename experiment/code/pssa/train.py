@@ -36,8 +36,9 @@ from pssa.model_v2 import PSSAVLAv2, PSEEntityEncoder
 
 
 def _load_backbone(model_id: str, freeze: bool = True):
-    """Load OpenVLA-7B-finetuned-libero-X and optionally apply LoRA."""
-    from transformers import AutoModelForVision2Seq
+    """Load OpenVLA-7B-finetuned-libero-X + matching processor; freeze optionally."""
+    from transformers import AutoModelForVision2Seq, AutoProcessor
+    proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
     model = AutoModelForVision2Seq.from_pretrained(
         model_id,
         torch_dtype=torch.bfloat16,
@@ -47,7 +48,7 @@ def _load_backbone(model_id: str, freeze: bool = True):
     if freeze:
         for p in model.parameters():
             p.requires_grad_(False)
-    return model
+    return model, proc
 
 
 def _apply_lora(model, r: int = 32, alpha: int = 64, dropout: float = 0.05):
@@ -82,7 +83,7 @@ def main(cfg: DictConfig) -> None:
 
     # ----- model -----
     accelerator.print(f"==> loading backbone {cfg.model.id}")
-    backbone = _load_backbone(cfg.model.id, freeze=cfg.model.freeze_backbone)
+    backbone, processor = _load_backbone(cfg.model.id, freeze=cfg.model.freeze_backbone)
     if cfg.model.lora.enable:
         backbone = _apply_lora(
             backbone,
@@ -100,6 +101,7 @@ def main(cfg: DictConfig) -> None:
     model = PSSAVLAv2(
         backbone=backbone,
         pse_encoder=pse_encoder,
+        processor=processor,
         lambda_xtc=cfg.model.lambda_xtc,
     )
 

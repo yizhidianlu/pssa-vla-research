@@ -120,14 +120,26 @@ class PSSAVLAv2(nn.Module):
         self,
         backbone,                                # OpenVLAForActionPrediction (PEFT-wrapped)
         pse_encoder: PSEEntityEncoder | None = None,
+        processor=None,                          # AutoProcessor for tokenizer
         lambda_xtc: float = 0.1,
+        action_dim: int = 7,
     ) -> None:
         super().__init__()
         self.backbone = backbone
-        hidden_dim = getattr(backbone.config, "hidden_size", 4096)
+        # Find LLM hidden dim — may be wrapped by PEFT
+        cfg = getattr(backbone, "config", None) or backbone.base_model.config
+        hidden_dim = getattr(cfg, "hidden_size", 4096)
         self.pse_encoder = pse_encoder or PSEEntityEncoder(hidden_dim=hidden_dim)
         self.xtc_loss = XTCLoss()
         self.lambda_xtc = lambda_xtc
+        self.processor = processor
+        # Continuous action regression head (small MLP on LLM final hidden state)
+        self.action_head = nn.Sequential(
+            nn.LayerNorm(hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim // 4),
+            nn.GELU(),
+            nn.Linear(hidden_dim // 4, action_dim),
+        )
 
     def training_step(self, batch: dict) -> PSSATrainingOutput:
         """One training step.
@@ -209,14 +221,71 @@ class PSSAVLAv2(nn.Module):
         rgb_t: torch.Tensor,             # (B, 3, H, W)
         language: list[str],             # B-list
     ) -> torch.Tensor:
-        """v0 placeholder for the PSE-prefix LLM forward.
+        """v1: tokenize language + run vision + concat PSE prefix + LLM forward.
 
-        Subclasses must implement this to wire PSE tokens into OpenVLA's
-        input embedding sequence. The expected return is a (B, 7)
-        continuous action tensor.
+        Sequence: [text_embeds | pse_tokens (N) | image_embeds] → LLM →
+        last hidden state → action_head → (B, action_dim).
         """
-        raise NotImplementedError(
-            "Subclass PSSAVLAv2 and implement _step_action_logits(); for v0 "
-            "training set a stub that returns zeros and let the XTC term carry "
-            "the gradient through pse_encoder until the LLM hook lands."
-        )
+        if self.processor is None:
+            raise RuntimeError("PSSAVLAv2 needs a processor for v1")
+        device = rgb_t.device
+        B = rgb_t.shape[0]
+
+        # 1) tokenize language (batched, padded)
+        prompts = [f"In: what action to {ln.strip().lower()}? Out:" for ln in language]
+        tok = self.processor.tokenizer(
+            prompts, return_tensors="pt", padding=True,
+            truncation=True, max_length=64,
+        ).to(device)
+        text_embeds = self._get_input_embeddings()(tok.input_ids)   # (B, L, D)
+
+        # 2) vision via frozen vision_backbone + projector
+        base = self._unwrap()
+        with torch.no_grad():
+            try:
+                vis_feats = base.vision_backbone(rgb_t)
+            except Exception:
+                vis_feats = torch.zeros(B, 1, text_embeds.shape[-1],
+                                        device=device, dtype=text_embeds.dtype)
+        img_embeds = base.projector(vis_feats) if hasattr(base, "projector") else vis_feats
+        if img_embeds.dim() == 2:
+            img_embeds = img_embeds.unsqueeze(1)
+        img_embeds = img_embeds.to(text_embeds.dtype)
+
+        # 3) PSE prefix (cast to LLM dtype)
+        pse_embeds = pse_tokens.to(text_embeds.dtype)
+
+        # 4) concat + LLM forward
+        inputs_embeds = torch.cat([text_embeds, pse_embeds, img_embeds], dim=1)
+        attn = torch.ones(inputs_embeds.shape[:2], device=device,
+                          dtype=tok.attention_mask.dtype)
+        attn[:, : tok.attention_mask.shape[1]] = tok.attention_mask
+        llm = self._get_llm()
+        out = llm(inputs_embeds=inputs_embeds, attention_mask=attn)
+        last_hidden = out.last_hidden_state[:, -1]                  # (B, D)
+        return self.action_head(last_hidden.float())                # (B, 7)
+
+    # ---- module-access helpers ---------------------------------------------
+    def _unwrap(self):
+        """Return inner OpenVLAForActionPrediction (PEFT may wrap)."""
+        m = self.backbone
+        for attr in ("base_model", "model"):
+            if hasattr(m, attr):
+                inner = getattr(m, attr)
+                if hasattr(inner, "vision_backbone"):
+                    return inner
+        return m
+
+    def _get_input_embeddings(self):
+        return self._unwrap().get_input_embeddings()
+
+    def _get_llm(self):
+        """Return the inner LLM transformer for inputs_embeds forward."""
+        lm = getattr(self._unwrap(), "language_model", None)
+        if lm is None:
+            raise AttributeError("backbone has no .language_model")
+        # Prefer the inner transformer (.model) over the LM-with-head wrapper
+        inner = getattr(lm, "model", None)
+        if inner is not None and not isinstance(inner, type):
+            return inner
+        return lm
