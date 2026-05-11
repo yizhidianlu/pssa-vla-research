@@ -70,8 +70,14 @@ def _apply_lora(model, r: int = 32, alpha: int = 64, dropout: float = 0.05):
 
 @hydra.main(version_base=None, config_path="../configs", config_name="train")
 def main(cfg: DictConfig) -> None:
+    # For DDP with our IterableDataset + list[str] language field, disable
+    # accelerate's automatic batch dispatch — each rank reads its own batches
+    # via rank-aware seeding inside LIBEROEpisodeDataset.__iter__.
+    from accelerate import DataLoaderConfiguration
+    dl_cfg = DataLoaderConfiguration(dispatch_batches=False, split_batches=False)
     accelerator = Accelerator(
         gradient_accumulation_steps=cfg.train.grad_accum_steps,
+        dataloader_config=dl_cfg,
         log_with="wandb" if cfg.wandb.enable else None,
     )
     accelerator.print(OmegaConf.to_yaml(cfg))
