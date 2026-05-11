@@ -239,24 +239,17 @@ class PSSAVLAv2(nn.Module):
         ).to(device)
         text_embeds = self._get_input_embeddings()(tok.input_ids)   # (B, L, D)
 
-        # 2) vision via frozen vision_backbone + projector
-        base = self._unwrap()
-        with torch.no_grad():
-            try:
-                vis_feats = base.vision_backbone(rgb_t)
-            except Exception:
-                vis_feats = torch.zeros(B, 1, text_embeds.shape[-1],
-                                        device=device, dtype=text_embeds.dtype)
-        img_embeds = base.projector(vis_feats) if hasattr(base, "projector") else vis_feats
-        if img_embeds.dim() == 2:
-            img_embeds = img_embeds.unsqueeze(1)
-        img_embeds = img_embeds.to(text_embeds.dtype)
+        # 2) Vision is intentionally bypassed in v1: OpenVLA's DinoSigLIP
+        # backbone wants (B, 6, 224, 224) with its own preprocessing pipeline,
+        # which doesn't match our raw LIBERO demo (B, 3, 128, 128). PSE-Tok
+        # already encodes visual info from rgb_init into N entity tokens —
+        # we feed [text + PSE] only. v2 will integrate the proper preprocessor.
 
         # 3) PSE prefix (cast to LLM dtype)
         pse_embeds = pse_tokens.to(text_embeds.dtype)
 
         # 4) concat + LLM forward
-        inputs_embeds = torch.cat([text_embeds, pse_embeds, img_embeds], dim=1)
+        inputs_embeds = torch.cat([text_embeds, pse_embeds], dim=1)
         attn = torch.ones(inputs_embeds.shape[:2], device=device,
                           dtype=tok.attention_mask.dtype)
         attn[:, : tok.attention_mask.shape[1]] = tok.attention_mask
