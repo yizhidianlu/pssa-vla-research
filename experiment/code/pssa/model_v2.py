@@ -273,9 +273,9 @@ class PSSAVLAv2(nn.Module):
         relevant = hidden_states[:, pse_end : pse_end + 7]  # (B, 7, D)
 
         lm_head = self._get_lm_head()
-        logits = lm_head(relevant.float())             # (B, 7, V)
+        logits = lm_head(relevant)                     # (B, 7, V) in lm_head dtype
         loss = F.cross_entropy(
-            logits.reshape(-1, self._vocab_size),
+            logits.float().reshape(-1, self._vocab_size),
             action_token_ids.reshape(-1),
         )
         return loss
@@ -346,7 +346,7 @@ class PSSAVLAv2(nn.Module):
         for _ in range(self._action_dim):
             out = inner_lm(inputs_embeds=cur_embeds, attention_mask=cur_attn)
             last_hidden = out.last_hidden_state[:, -1:, :]              # (1, 1, D)
-            next_logits = lm_head(last_hidden.float()).squeeze(1)       # (1, V)
+            next_logits = lm_head(last_hidden).float().squeeze(1)       # (1, V)
             # Restrict to action token range
             mask = torch.full_like(next_logits, -float("inf"))
             mask[:, self._vocab_size - self._n_action_bins : self._vocab_size] = 0.0
