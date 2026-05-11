@@ -5,7 +5,7 @@
   "topic_brief": "Move VLA grounding from single-frame region-level alignment to temporally-consistent scene-level entity tracking; use that consistency to detect and correct execution-time errors in long-horizon, multi-stage, dynamic manipulation.",
   "pipeline_mode": "deep",
   "paper_mode": "original_research",
-  "current_stage": "phase1_baseline_4suites_complete",
+  "current_stage": "phase2_v1.1_eval_complete_xtc_dead_in_v1",
   "started_at": "2026-05-09T00:04:00+08:00",
   "stages": {
     "init": {
@@ -132,7 +132,49 @@
         "Phase 2: train PSSA on libero_spatial (~6-12 GPU-hr, ¥50-100)",
         "Phase 3: 4 ablations (−PSE, −XTC, −CRED, multi-frame ViT same-budget)",
         "Phase 3: LIBERO-LONG, LIBERO-Plus, CALVIN ABC-D"
-      ]
+      ],
+      "phase2_v1.1": {
+        "status": "complete (training + eval + ablation)",
+        "started_at": "2026-05-11T09:36:00+08:00",
+        "completed_at": "2026-05-11T13:03:00+08:00",
+        "wallclock": "training ~80 min/run x2 + eval ~28 min/run x2",
+        "actual_cost_rmb": "training+eval ~35 (dual-A800 + single A800 same suite)",
+        "architecture": "v1.1 bypasses OpenVLA DinoSigLIP vision_backbone — feeds [text_embeds | PSE_tokens] only to LLM, with continuous-MLP action head",
+        "training_runs": [
+          {
+            "name": "baseline",
+            "machine": "new dual-A800 port 16967",
+            "dir": "experiment/runs/pssa_train_v1-20260511-093620",
+            "lambda_xtc": 0.1,
+            "steps": 3000, "batch_size": 2, "lr": 2e-4,
+            "lora": {"r": 32, "alpha": 64, "targets": ["q_proj", "v_proj"]},
+            "final_loss": 0.2883,
+            "trainable_params_m": 40.25
+          },
+          {
+            "name": "ablation_no_xtc",
+            "machine": "old A800 port 50535",
+            "dir": "experiment/runs/pssa_train_v1_ablation_noxtc-20260511-105149",
+            "lambda_xtc": 0.0,
+            "steps": 3000, "batch_size": 2, "lr": 2e-4,
+            "lora": {"r": 32, "alpha": 64, "targets": ["q_proj", "v_proj"]},
+            "trainable_params_m": 40.25
+          }
+        ],
+        "eval_libero_spatial": {
+          "baseline_lambda_0.1": {
+            "n_rollouts": 100, "n_tasks": 10, "n_success": 0, "mean_sr": 0.0,
+            "dir": "experiment/runs/pssa_eval_v1_baseline_loop-20260511-123334"
+          },
+          "ablation_lambda_0": {
+            "n_rollouts": 100, "n_tasks": 10, "n_success": 0, "mean_sr": 0.0,
+            "dir": "experiment/runs/pssa_eval_v1_ablation_loop-20260511-123344"
+          }
+        },
+        "key_finding": "v1.1 fails to drive any successful rollouts; XTC ablation collapses because L_xtc<5e-5 (numerical floor) due to vision bypass — XTC loss is dead in v1.1, contribution to total loss < 0.003%",
+        "implication": "Need v2 with proper DinoSigLIP vision integration for XTC to fire meaningfully. v1.1 validates pipeline (LoRA + PSE-Tok + action head all train) but not policy quality.",
+        "findings_doc": "drafts/PSSA_V1_FINDINGS.md"
+      }
     },
     "analysis": {
       "status": "smoke_only",
@@ -162,10 +204,12 @@
     }
   },
   "checkpoints": {
-    "last": "phase1_baseline_complete",
-    "next": "phase2_pssa_training_pipeline",
+    "last": "phase2_v1.1_complete_xtc_numerically_dead",
+    "next": "phase2_v2_dinosiglip_integration",
     "phase2_scope": "implement PSSA action head training (PSE-Tok + XTC-Loss + CRED) on top of frozen OpenVLA backbone, train on LIBERO demo data",
     "phase2_estimate": "~300 lines code + ~6-12 GPU-hr training (¥50-100)",
+    "phase2_v1.1_done": "Training pipeline validated end-to-end. Both baseline (lambda_xtc=0.1) and ablation (lambda_xtc=0) hit 0/100 Spatial SR. XTC loss < 5e-5 throughout — needs v2 vision path to fire.",
+    "phase2_v2_scope": "integrate OpenVLA's DinoSigLIP image preprocessor in training_step + reuse OpenVLA's native discrete action token decoder (keep continuous-MLP head as alt path)",
     "headroom_to_beat": "80.2% suite-level SR on libero_spatial with the exact same 10×50 protocol",
     "resume_via": "/project:resume"
   },
