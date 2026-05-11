@@ -160,10 +160,9 @@ def main(cfg: DictConfig) -> None:
             ckpt_dir = out_dir / "checkpoints" / f"step_{step:06d}"
             ckpt_dir.mkdir(parents=True, exist_ok=True)
             unwrapped = accelerator.unwrap_model(model)
-            # Save PSE encoder + action_head together (both trainable, not in LoRA)
+            # C route: only pse_encoder is trainable outside LoRA (no action_head).
             torch.save({
                 "pse_encoder": unwrapped.pse_encoder.state_dict(),
-                "action_head": unwrapped.action_head.state_dict(),
             }, ckpt_dir / "pssa_modules.pt")
             if cfg.model.lora.enable:
                 unwrapped.backbone.save_pretrained(ckpt_dir / "lora")

@@ -1,28 +1,31 @@
-"""PSSAVLAv2 — production training wrapper around OpenVLA-7B.
+"""PSSAVLAv2 (Route C) — OpenVLA's native discrete-action-token decoder + PSE prefix.
 
-Architecture (Path A from plan):
-    [BOS, lang_embeds, PSE_entity_embeds, image_embeds, action_query] → LLM → action tokens
-
-Training scope:
-- Frozen:    vision_backbone, projector, original action token decoder
-- Trainable: PSE-Tok module, LoRA adapters on LLM (q/v projections), input
-             projection that maps PSE entity features into LLM hidden dim.
+Architecture:
+    [text | image_embeds (256) | PSE_prefix (N)] -> Llama -> action tokens (7)
 
 Loss:
-    L_action  : standard CE on discretized action tokens (OpenVLA's native loss)
-    L_xtc     : cross-time consistency on entity features (predicted-effect residual)
-    L_total   = L_action + lambda_xtc * L_xtc
+    L_action : CE on the 7 action token positions (OpenVLA's native objective).
+    L_xtc    : cross-time consistency on per-step PSE entity features.
+    L_total  = L_action + lambda_xtc * L_xtc
+
+Training scope:
+- Frozen   : vision_backbone, projector, LM head
+- Trainable: PSE-Tok encoder, LoRA adapters on Llama q/v projections.
+
+The crucial difference from v1.1: we predict action tokens via the same LM head
+OpenVLA was finetuned with (so we inherit the 80.2% LIBERO-Spatial behavior as
+the starting policy), and only train the PSE prefix + LoRA delta on top.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
-# Forward-declare types via TYPE_CHECKING for clean imports
 @dataclass
 class PSSATrainingOutput:
     loss: torch.Tensor
@@ -34,9 +37,6 @@ class PSSATrainingOutput:
 class PSEEntityEncoder(nn.Module):
     """Encodes (B, T0, 3, H, W) initial frames + (B, T0, N, H, W) masks into
     (B, N, hidden_dim) persistent entity tokens.
-
-    Uses a small CNN over masked regions of each entity. Each entity slot's
-    feature is the temporal-average of its T0 mask-pooled CNN features.
     """
 
     def __init__(self, n_entities: int = 8, hidden_dim: int = 4096,
@@ -44,7 +44,6 @@ class PSEEntityEncoder(nn.Module):
         super().__init__()
         self.n_entities = n_entities
         self.hidden_dim = hidden_dim
-        # Tiny CNN — frozen vision_backbone is the heavy lifter elsewhere
         self.cnn = nn.Sequential(
             nn.Conv2d(3, 64, 7, stride=2, padding=3), nn.GELU(),
             nn.Conv2d(64, 128, 3, stride=2, padding=1), nn.GELU(),
@@ -58,48 +57,28 @@ class PSEEntityEncoder(nn.Module):
         )
 
     def forward(self, rgb_init: torch.Tensor, masks_init: torch.Tensor) -> torch.Tensor:
-        """
-        rgb_init:   (B, T0, 3, H, W)
-        masks_init: (B, T0, N, H, W)
-        returns:    (B, N, hidden_dim) PSE entity tokens
-        """
         B, T0, _, H, W = rgb_init.shape
         N = self.n_entities
-        # CNN over each frame: (B*T0, cnn_dim, h, w)
         feats = self.cnn(rgb_init.flatten(0, 1))
         _, C, h, w = feats.shape
-        # Down-sample masks to feature spatial resolution
         masks_small = F.adaptive_avg_pool2d(masks_init.flatten(0, 1), (h, w))
-        # masks_small: (B*T0, N, h, w)
-        # Mask-pool features per entity: (B*T0, N, C)
         feats_per_entity = torch.einsum("bchw,bnhw->bnc", feats, masks_small)
         denom = masks_small.flatten(2).sum(-1, keepdim=True).clamp_min(1.0)
         feats_per_entity = feats_per_entity / denom
-        # Average over T0 frames: (B, N, C)
         feats_per_entity = feats_per_entity.view(B, T0, N, C).mean(dim=1)
-        # Add entity id embedding
         ids = torch.arange(N, device=feats_per_entity.device)
         id_e = self.id_embed(ids).unsqueeze(0).expand(B, -1, -1)
-        # Project to LLM hidden dim
         out = self.proj(torch.cat([feats_per_entity, id_e], dim=-1))
-        return out  # (B, N, hidden_dim)
+        return out
 
 
 class XTCLoss(nn.Module):
-    """Cross-time consistency loss on PSE entity features.
-
-    For phase-2 v0, we use a simple smoothness penalty:
-        L_xtc = mean((f_t - f_{t-1})^2)
-
-    This will be upgraded to predicted-effect residual once the
-    Δf_pred(a_{t-1}) module is wired in.
-    """
+    """Cross-time consistency: smoothness penalty on entity features."""
 
     def __init__(self) -> None:
         super().__init__()
 
     def forward(self, entity_seq: torch.Tensor) -> torch.Tensor:
-        # entity_seq: (B, T, N, D)
         if entity_seq.size(1) < 2:
             return entity_seq.new_zeros(())
         diff = entity_seq[:, 1:] - entity_seq[:, :-1]
@@ -107,98 +86,105 @@ class XTCLoss(nn.Module):
 
 
 class PSSAVLAv2(nn.Module):
-    """Wraps a frozen OpenVLA-7B + adds PSE entity prefix + LoRA on LLM.
-
-    The OpenVLA model is loaded externally and passed in. We add:
-    - pse_encoder: PSEEntityEncoder
-    - lora adapters via peft (added externally; this class accepts a PEFT-
-      wrapped model)
-    - xtc_loss: XTCLoss
-    """
+    """Route C: PSE prefix + OpenVLA native action-token CE loss."""
 
     def __init__(
         self,
-        backbone,                                # OpenVLAForActionPrediction (PEFT-wrapped)
+        backbone,
         pse_encoder: PSEEntityEncoder | None = None,
-        processor=None,                          # AutoProcessor for tokenizer
+        processor=None,
         lambda_xtc: float = 0.1,
-        action_dim: int = 7,
+        unnorm_key: str = "libero_spatial",
     ) -> None:
         super().__init__()
         self.backbone = backbone
-        # Find LLM hidden dim — may be wrapped by PEFT
         cfg = getattr(backbone, "config", None) or backbone.base_model.config
         hidden_dim = getattr(cfg, "hidden_size", 4096)
         self.pse_encoder = pse_encoder or PSEEntityEncoder(hidden_dim=hidden_dim)
         self.xtc_loss = XTCLoss()
         self.lambda_xtc = lambda_xtc
         self.processor = processor
-        # Continuous action regression head (small MLP on LLM final hidden state)
-        self.action_head = nn.Sequential(
-            nn.LayerNorm(hidden_dim),
-            nn.Linear(hidden_dim, hidden_dim // 4),
-            nn.GELU(),
-            nn.Linear(hidden_dim // 4, action_dim),
-        )
+        self.unnorm_key = unnorm_key
+        self._cache_action_stats()
+
+    # ---- action discretization helpers ------------------------------------
+
+    def _cache_action_stats(self) -> None:
+        """Pull action norm stats + vocab size from the OpenVLA backbone once."""
+        inner = self._unwrap()
+        cfg = inner.config
+        self._vocab_size = cfg.vocab_size  # 32000
+        self._n_action_bins = cfg.n_action_bins  # 256
+        stats = cfg.norm_stats[self.unnorm_key]["action"]
+        # q01/q99 are the unnormalization bounds; mask indicates which dims to unnormalize
+        self._action_q01 = np.array(stats["q01"], dtype=np.float32)  # (7,)
+        self._action_q99 = np.array(stats["q99"], dtype=np.float32)
+        if "mask" in stats:
+            self._action_mask = np.array(stats["mask"], dtype=bool)
+        else:
+            self._action_mask = np.ones_like(self._action_q01, dtype=bool)
+        # Bin edges in [-1, 1]
+        self._bin_edges = np.linspace(-1.0, 1.0, self._n_action_bins + 1)
+        self._bin_centers = (self._bin_edges[:-1] + self._bin_edges[1:]) / 2.0
+        self._action_dim = len(self._action_q01)  # 7
+
+    def _discretize_action(self, action: torch.Tensor) -> torch.Tensor:
+        """Continuous action (B, 7) -> token IDs (B, 7) in [vocab-256, vocab-1].
+
+        Follows OpenVLA's convention: token_id = vocab_size - bin_index - 1
+        where bin_index in [0, n_action_bins-1].
+        """
+        device = action.device
+        a_np = action.detach().cpu().float().numpy()  # (B, 7)
+
+        # Unnormalize -> normalize. The model was finetuned on action-token-ed
+        # continuous actions. Map back: normalized = 2 * (a - q01) / (q99 - q01) - 1
+        q01 = self._action_q01[None, :]
+        q99 = self._action_q99[None, :]
+        normalized = 2.0 * (a_np - q01) / np.clip(q99 - q01, 1e-8, None) - 1.0
+        # For masked dims (typically all True for libero), keep normalized; for
+        # unmasked dims (none here, but defensive), use raw action.
+        mask = self._action_mask[None, :]
+        normalized = np.where(mask, normalized, a_np)
+        normalized = np.clip(normalized, -1.0, 1.0)
+        # digitize -> bin_index in [0, 255]
+        bin_idx = np.digitize(normalized, self._bin_edges) - 1
+        bin_idx = np.clip(bin_idx, 0, self._n_action_bins - 1).astype(np.int64)
+        # token_id = vocab_size - bin_idx - 1
+        token_ids = self._vocab_size - bin_idx - 1
+        return torch.from_numpy(token_ids).to(device)
+
+    # ---- training step ----------------------------------------------------
 
     def training_step(self, batch: dict) -> PSSATrainingOutput:
-        """One training step.
-
-        batch:
-            rgb_init   (B, T0, 3, H, W)
-            rgb_seq    (B, T, 3, H, W)
-            actions    (B, T, 7)
-            masks_init (B, T0, N, H, W)
-            language   list[str] of length B
-
-        returns: PSSATrainingOutput
-        """
         rgb_init = batch["rgb_init"]
         rgb_seq = batch["rgb_seq"]
-        actions = batch["actions"]
+        actions = batch["actions"]              # (B, T, 7) continuous
         masks_init = batch["masks_init"]
         language = batch["language"]
 
         B, T = rgb_seq.shape[:2]
+        device = rgb_seq.device
 
-        # 1) Encode persistent entities from initial frames
+        # Persistent entity tokens from init frames
         pse_tokens = self.pse_encoder(rgb_init, masks_init)            # (B, N, D)
 
-        # 2) For each step in the window, build OpenVLA-style input + PSE prefix
-        #    and accumulate action loss. We loop because OpenVLA's input
-        #    construction is per-frame; this is a phase-2 v0 trade-off.
-        #    A future v1 will batch the temporal axis as a single LLM call.
-        device = rgb_seq.device
         loss_action = rgb_seq.new_zeros(())
         entity_seq = []
         for t in range(T):
-            # Re-encode entity features from current frame for XTC.
-            # Keep gradient flowing through pse_encoder so XTC loss trains it
-            # (in v0, XTC is the only training signal since _step_action_logits
-            # raises NotImplementedError).
             ent_t = self.pse_encoder(
                 rgb_seq[:, t:t+1], masks_init[:, :1].expand(-1, 1, -1, -1, -1)
             )
             entity_seq.append(ent_t)
-            # NB: real OpenVLA forward with PSE prefix injection requires a
-            # PEFT/transformers integration that's beyond this v0 scaffold.
-            # For now we run the action head on a coarse readout to get a
-            # gradient flowing through pse_encoder + the LLM.
-            try:
-                # Best-effort: use backbone's predict_action via the LLM
-                # input_embeds path. Subclasses can override this.
-                pred_action = self._step_action_logits(
-                    pse_tokens, ent_t, rgb_seq[:, t], language
-                )
-                loss_action = loss_action + F.mse_loss(pred_action, actions[:, t])
-            except NotImplementedError:
-                # In the v0 scaffold the backbone hook may not be implemented;
-                # we still accumulate XTC loss which trains pse_encoder.
-                pass
+
+            loss_t = self._step_action_ce_loss(
+                pse_tokens, rgb_seq[:, t], language, actions[:, t]
+            )
+            loss_action = loss_action + loss_t
 
         loss_action = loss_action / max(T, 1)
 
-        # 3) XTC loss on per-step entity features
+        # XTC on per-step entity sequence
         if entity_seq:
             entity_stack = torch.stack(entity_seq, dim=1)              # (B, T, 1, N, D)
             entity_stack = entity_stack.squeeze(2)                     # (B, T, N, D)
@@ -214,34 +200,25 @@ class PSSAVLAv2(nn.Module):
             n_entity_tokens=pse_tokens.shape[1],
         )
 
-    def _step_action_logits(
+    def _step_action_ce_loss(
         self,
         pse_tokens: torch.Tensor,        # (B, N, D)
-        ent_t: torch.Tensor,             # (B, 1, N, D) — unused
-        rgb_t: torch.Tensor,             # (B, 3, H, W), values in [0, 1]
-        language: list[str],             # B-list
+        rgb_t: torch.Tensor,             # (B, 3, H, W) in [0, 1]
+        language: list[str],
+        action_target: torch.Tensor,     # (B, 7) continuous
     ) -> torch.Tensor:
-        """v2: full DinoSigLIP vision + text + PSE prefix → LLM → action_head.
-
-        Sequence: [text_embeds | image_embeds (256) | pse_tokens (N)] → LLM →
-        last hidden state → action_head → (B, action_dim).
-        """
-        if self.processor is None:
-            raise RuntimeError("PSSAVLAv2 needs a processor for v2")
+        """Build [text | image | PSE | action_target_embeds] and compute CE
+        on the 7 action token positions."""
         device = rgb_t.device
         B = rgb_t.shape[0]
 
-        # 1) RGB tensor → PIL list (processor expects PIL, handles 128→224 resize)
         from PIL import Image
-        import numpy as np
         rgb_np = (rgb_t.detach().clamp(0, 1).permute(0, 2, 3, 1).cpu()
                   .float().numpy() * 255).astype(np.uint8)
         pil_imgs = [Image.fromarray(rgb_np[i]) for i in range(B)]
 
-        # 2) Prompts
         prompts = [f"In: what action to {ln.strip().lower()}? Out:" for ln in language]
 
-        # 3) Processor produces input_ids + attention_mask + pixel_values (B,6,224,224)
         inputs = self.processor(
             text=prompts, images=pil_imgs, return_tensors="pt", padding=True,
         )
@@ -249,36 +226,139 @@ class PSSAVLAv2(nn.Module):
         input_ids = inputs["input_ids"].to(device)
         attn_text = inputs["attention_mask"].to(device)
 
-        # 4) Vision: backbone frozen — but we keep gradients flowing for LLM
-        #    (vision_backbone has requires_grad_(False) so storage is light)
+        # Append the special-empty token (29871) that predict_action uses, then
+        # the discretized action target — this matches OpenVLA's training layout
+        special_empty = input_ids.new_full((B, 1), 29871)
+        action_token_ids = self._discretize_action(action_target)     # (B, 7) long
+        target_ids = torch.cat([special_empty, action_token_ids], dim=1)  # (B, 8)
+
+        # Embed everything via the model's input embeddings (frozen unless LoRA wraps)
+        embed_layer = self._get_input_embeddings()
+        text_embeds = embed_layer(input_ids)                          # (B, L_text, D)
+        target_embeds = embed_layer(target_ids)                       # (B, 8, D)
+
         inner = self._unwrap()
-        with torch.no_grad():  # vision is frozen; saves activation memory
-            img_feats = inner.vision_backbone(pixel_values)         # (B, 256, 2176)
-            image_embeds = inner.projector(img_feats)               # (B, 256, D)
-        # Detach to be explicit (projector is also frozen)
-        image_embeds = image_embeds.detach()
+        with torch.no_grad():
+            img_feats = inner.vision_backbone(pixel_values)           # (B, 256, 2176)
+            image_embeds = inner.projector(img_feats).detach()        # (B, 256, D)
 
-        # 5) Text embeds (input_embeddings is frozen unless LoRA wraps it)
-        text_embeds = self._get_input_embeddings()(input_ids)       # (B, L, D)
-
-        # 6) PSE prefix (cast to LLM dtype)
         pse_embeds = pse_tokens.to(text_embeds.dtype)
 
-        # 7) Concat: [text | image | PSE]
-        inputs_embeds = torch.cat([text_embeds, image_embeds, pse_embeds], dim=1)
+        # Final sequence: [text | image | PSE | special_empty + action_tokens]
+        inputs_embeds = torch.cat(
+            [text_embeds, image_embeds, pse_embeds, target_embeds], dim=1,
+        )
         attn_img = torch.ones(image_embeds.shape[:2], device=device, dtype=attn_text.dtype)
         attn_pse = torch.ones(pse_embeds.shape[:2], device=device, dtype=attn_text.dtype)
-        attn = torch.cat([attn_text, attn_img, attn_pse], dim=1)
+        attn_tgt = torch.ones(target_embeds.shape[:2], device=device, dtype=attn_text.dtype)
+        attn = torch.cat([attn_text, attn_img, attn_pse, attn_tgt], dim=1)
 
-        # 8) LLM forward
-        llm = self._get_llm()
-        out = llm(inputs_embeds=inputs_embeds, attention_mask=attn)
-        last_hidden = out.last_hidden_state[:, -1]                  # (B, D)
-        return self.action_head(last_hidden.float())                # (B, 7)
+        # Labels: -100 everywhere except the 7 action token positions
+        text_len = text_embeds.shape[1]
+        img_len = image_embeds.shape[1]
+        pse_len = pse_embeds.shape[1]
+        total_len = inputs_embeds.shape[1]
+        labels = torch.full((B, total_len), -100, dtype=torch.long, device=device)
+        # The 7 action tokens occupy the LAST 7 positions
+        labels[:, -7:] = action_token_ids
 
-    # ---- module-access helpers ---------------------------------------------
+        # Run the full LM (with lm_head) to get CE loss internally
+        # _get_lm_for_loss returns the LlamaForCausalLM (with lm_head)
+        lm = self._get_lm_for_loss()
+        out = lm(inputs_embeds=inputs_embeds, attention_mask=attn, labels=labels)
+        return out.loss
+
+    # ---- inference --------------------------------------------------------
+
+    @torch.no_grad()
+    def compute_pse(
+        self,
+        rgb_init: torch.Tensor,         # (1, T0, 3, H, W)
+        masks_init: torch.Tensor,       # (1, T0, N, H, W)
+    ) -> torch.Tensor:
+        """One-shot PSE encoding from initial frames. Call once per rollout."""
+        return self.pse_encoder(rgb_init, masks_init)                  # (1, N, D)
+
+    @torch.no_grad()
+    def predict_action(
+        self,
+        pse_tokens: torch.Tensor,       # (1, N, D)  pre-computed via compute_pse
+        rgb_t: torch.Tensor,            # (1, 3, H, W)  current frame in [0, 1]
+        language: list[str],            # length-1
+    ) -> np.ndarray:
+        """Predict a 7-DoF continuous action for the current observation.
+
+        Build [text | image | PSE | special_empty] and autoregressively decode
+        7 action tokens, then de-discretize + unnormalize. Returns shape (7,).
+        """
+        device = rgb_t.device
+
+        from PIL import Image
+        rgb_np = (rgb_t.clamp(0, 1).permute(0, 2, 3, 1).cpu().float()
+                  .numpy() * 255).astype(np.uint8)
+        pil_imgs = [Image.fromarray(rgb_np[0])]
+        prompts = [f"In: what action to {language[0].strip().lower()}? Out:"]
+
+        inputs = self.processor(
+            text=prompts, images=pil_imgs, return_tensors="pt", padding=True,
+        )
+        pixel_values = inputs["pixel_values"].to(device, dtype=torch.bfloat16)
+        input_ids = inputs["input_ids"].to(device)
+        attn_text = inputs["attention_mask"].to(device)
+
+        special_empty = input_ids.new_full((1, 1), 29871)
+
+        embed_layer = self._get_input_embeddings()
+        text_embeds = embed_layer(input_ids)
+        special_embed = embed_layer(special_empty)
+
+        inner = self._unwrap()
+        img_feats = inner.vision_backbone(pixel_values)
+        image_embeds = inner.projector(img_feats)
+
+        pse_embeds = pse_tokens.to(text_embeds.dtype)
+
+        prefix_embeds = torch.cat(
+            [text_embeds, image_embeds, pse_embeds, special_embed], dim=1,
+        )
+        attn_img = torch.ones(image_embeds.shape[:2], device=device, dtype=attn_text.dtype)
+        attn_pse = torch.ones(pse_embeds.shape[:2], device=device, dtype=attn_text.dtype)
+        attn_se = torch.ones((1, 1), device=device, dtype=attn_text.dtype)
+        attn_prefix = torch.cat([attn_text, attn_img, attn_pse, attn_se], dim=1)
+
+        lm = self._get_lm_for_loss()
+        gen_ids = []
+        cur_embeds = prefix_embeds
+        cur_attn = attn_prefix
+        for _ in range(self._action_dim):
+            out = lm(inputs_embeds=cur_embeds, attention_mask=cur_attn)
+            next_logits = out.logits[:, -1, :]
+            # Restrict to action token range
+            mask = torch.full_like(next_logits, -float("inf"))
+            mask[:, self._vocab_size - self._n_action_bins : self._vocab_size] = 0.0
+            next_logits = next_logits + mask
+            next_id = next_logits.argmax(dim=-1, keepdim=True)
+            gen_ids.append(next_id.item())
+            next_embed = embed_layer(next_id)
+            cur_embeds = torch.cat([cur_embeds, next_embed], dim=1)
+            cur_attn = torch.cat(
+                [cur_attn, torch.ones((1, 1), device=device, dtype=attn_text.dtype)],
+                dim=1,
+            )
+
+        token_ids = np.array(gen_ids, dtype=np.int64)
+        bin_idx = self._vocab_size - token_ids - 1
+        bin_idx = np.clip(bin_idx, 0, self._n_action_bins - 1)
+        normalized = self._bin_centers[bin_idx]
+        unnormed = self._action_q01 + (normalized + 1.0) / 2.0 * (
+            self._action_q99 - self._action_q01
+        )
+        action = np.where(self._action_mask, unnormed, normalized)
+        return action.astype(np.float32)
+
+    # ---- module-access helpers --------------------------------------------
+
     def _unwrap(self):
-        """Return inner OpenVLAForActionPrediction (PEFT may wrap)."""
         m = self.backbone
         for attr in ("base_model", "model"):
             if hasattr(m, attr):
@@ -290,13 +370,9 @@ class PSSAVLAv2(nn.Module):
     def _get_input_embeddings(self):
         return self._unwrap().get_input_embeddings()
 
-    def _get_llm(self):
-        """Return the inner LLM transformer for inputs_embeds forward."""
+    def _get_lm_for_loss(self):
+        """Return the full LlamaForCausalLM (with lm_head) for forward + labels."""
         lm = getattr(self._unwrap(), "language_model", None)
         if lm is None:
             raise AttributeError("backbone has no .language_model")
-        # Prefer the inner transformer (.model) over the LM-with-head wrapper
-        inner = getattr(lm, "model", None)
-        if inner is not None and not isinstance(inner, type):
-            return inner
         return lm

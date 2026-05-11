@@ -83,13 +83,12 @@ def main() -> None:
         n_entities=args.n_entities, hidden_dim=hidden_dim, cnn_dim=256,
     )
     model = PSSAVLAv2(backbone=backbone, pse_encoder=pse, processor=proc)
-    # Load PSE + action_head from saved ckpt
+    # C route: only pse_encoder is loaded from ckpt (no action_head).
     modules_pt = ckpt_dir / "pssa_modules.pt"
     if not modules_pt.exists():
-        raise FileNotFoundError(f"missing {modules_pt} — train.py must have saved both pse+action")
+        raise FileNotFoundError(f"missing {modules_pt}")
     state = torch.load(modules_pt, map_location="cpu")
     model.pse_encoder.load_state_dict(state["pse_encoder"])
-    model.action_head.load_state_dict(state["action_head"])
     model = model.to(device).eval()
 
     suite = benchmark.get_benchmark_dict()[args.suite]()
@@ -131,8 +130,7 @@ def main() -> None:
         )
 
         # Compute persistent entity tokens once per rollout
-        with torch.no_grad():
-            pse_tokens = model.pse_encoder(init_t, masks_init)   # (1, N, D)
+        pse_tokens = model.compute_pse(init_t, masks_init)            # (1, N, D)
 
         per_step_ms = []
         success = False
@@ -141,15 +139,12 @@ def main() -> None:
             rgb_tensor = (torch.from_numpy(rgb_t).permute(2, 0, 1)
                           .float().unsqueeze(0) / 255.0).to(device)
             s_t0 = time.time()
-            with torch.no_grad():
-                # ent_t is unused by v1 _step_action_logits (vision bypassed)
-                action_pred = model._step_action_logits(
-                    pse_tokens, pse_tokens.unsqueeze(1),  # ent_t placeholder
-                    rgb_tensor, [task.language],
-                )
+            action_np = model.predict_action(
+                pse_tokens=pse_tokens, rgb_t=rgb_tensor,
+                language=[task.language],
+            )
             torch.cuda.synchronize()
             per_step_ms.append((time.time() - s_t0) * 1000)
-            action_np = action_pred[0].detach().cpu().float().numpy()
             obs, reward, done, info = env.step(action_np.tolist())
             if done:
                 success = bool(info.get("success", reward > 0))
@@ -170,7 +165,7 @@ def main() -> None:
     n_succ = sum(1 for r in rollouts_data if r["success"])
     out_data = {
         "suite": args.suite, "task_id": args.task_id, "task_name": task.name,
-        "model": "PSSA-VLA v1.1 (text+PSE, vision bypassed)",
+        "model": "PSSA-VLA v2 Route-C (text+image+PSE prefix, OpenVLA discrete action tokens)",
         "ckpt": str(ckpt_dir), "backbone_id": args.backbone_id,
         "n_rollouts": args.rollouts, "n_success": n_succ,
         "success_rate": n_succ / args.rollouts if args.rollouts else 0.0,
