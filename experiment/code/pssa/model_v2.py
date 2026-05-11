@@ -157,6 +157,10 @@ class PSSAVLAv2(nn.Module):
 
     # ---- training step ----------------------------------------------------
 
+    def forward(self, batch: dict) -> PSSATrainingOutput:
+        """Training forward — exposed as `forward` so DDP can wrap it."""
+        return self.training_step(batch)
+
     def training_step(self, batch: dict) -> PSSATrainingOutput:
         rgb_init = batch["rgb_init"]
         rgb_seq = batch["rgb_seq"]

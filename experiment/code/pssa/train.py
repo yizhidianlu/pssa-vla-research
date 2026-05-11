@@ -143,7 +143,8 @@ def main(cfg: DictConfig) -> None:
     log_lines = []
     for batch in train_loader:
         with accelerator.accumulate(model):
-            out = model.training_step(batch)
+            # Call via forward() so DDP/FSDP wrappers can hook gradient sync
+            out = model(batch)
             accelerator.backward(out.loss)
             if accelerator.sync_gradients:
                 accelerator.clip_grad_norm_(trainable, cfg.train.grad_clip)
