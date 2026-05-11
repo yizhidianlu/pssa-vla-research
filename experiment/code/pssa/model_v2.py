@@ -254,20 +254,31 @@ class PSSAVLAv2(nn.Module):
         attn_tgt = torch.ones(target_embeds.shape[:2], device=device, dtype=attn_text.dtype)
         attn = torch.cat([attn_text, attn_img, attn_pse, attn_tgt], dim=1)
 
-        # Labels: -100 everywhere except the 7 action token positions
+        # Run inner transformer (no lm_head over all positions).
+        # Apply lm_head only at the 7 positions that predict action tokens —
+        # saves ~277x activation memory on logits + backward grads vs full
+        # vocab logits over the whole 284-token sequence.
+        inner_lm = self._get_inner_transformer()       # LlamaModel (no head)
+        out = inner_lm(inputs_embeds=inputs_embeds, attention_mask=attn)
+        hidden_states = out.last_hidden_state          # (B, L, D)
+
+        # Sequence layout: [text | image | PSE | special_empty | a0 a1 .. a6]
+        # We want logits at positions [pse_end .. pse_end+6] to predict
+        # [a0 .. a6] (the model uses position k's hidden state to predict
+        # the token AT position k+1; here pse_end's hidden predicts a0).
         text_len = text_embeds.shape[1]
         img_len = image_embeds.shape[1]
         pse_len = pse_embeds.shape[1]
-        total_len = inputs_embeds.shape[1]
-        labels = torch.full((B, total_len), -100, dtype=torch.long, device=device)
-        # The 7 action tokens occupy the LAST 7 positions
-        labels[:, -7:] = action_token_ids
+        pse_end = text_len + img_len + pse_len         # index of special_empty
+        relevant = hidden_states[:, pse_end : pse_end + 7]  # (B, 7, D)
 
-        # Run the full LM (with lm_head) to get CE loss internally
-        # _get_lm_for_loss returns the LlamaForCausalLM (with lm_head)
-        lm = self._get_lm_for_loss()
-        out = lm(inputs_embeds=inputs_embeds, attention_mask=attn, labels=labels)
-        return out.loss
+        lm_head = self._get_lm_head()
+        logits = lm_head(relevant.float())             # (B, 7, V)
+        loss = F.cross_entropy(
+            logits.reshape(-1, self._vocab_size),
+            action_token_ids.reshape(-1),
+        )
+        return loss
 
     # ---- inference --------------------------------------------------------
 
@@ -327,13 +338,15 @@ class PSSAVLAv2(nn.Module):
         attn_se = torch.ones((1, 1), device=device, dtype=attn_text.dtype)
         attn_prefix = torch.cat([attn_text, attn_img, attn_pse, attn_se], dim=1)
 
-        lm = self._get_lm_for_loss()
+        inner_lm = self._get_inner_transformer()
+        lm_head = self._get_lm_head()
         gen_ids = []
         cur_embeds = prefix_embeds
         cur_attn = attn_prefix
         for _ in range(self._action_dim):
-            out = lm(inputs_embeds=cur_embeds, attention_mask=cur_attn)
-            next_logits = out.logits[:, -1, :]
+            out = inner_lm(inputs_embeds=cur_embeds, attention_mask=cur_attn)
+            last_hidden = out.last_hidden_state[:, -1:, :]              # (1, 1, D)
+            next_logits = lm_head(last_hidden.float()).squeeze(1)       # (1, V)
             # Restrict to action token range
             mask = torch.full_like(next_logits, -float("inf"))
             mask[:, self._vocab_size - self._n_action_bins : self._vocab_size] = 0.0
@@ -371,9 +384,19 @@ class PSSAVLAv2(nn.Module):
     def _get_input_embeddings(self):
         return self._unwrap().get_input_embeddings()
 
-    def _get_lm_for_loss(self):
-        """Return the full LlamaForCausalLM (with lm_head) for forward + labels."""
+    def _get_inner_transformer(self):
+        """Return the inner LlamaModel (no lm_head) so we can apply the head
+        manually only at the positions we need."""
         lm = getattr(self._unwrap(), "language_model", None)
         if lm is None:
             raise AttributeError("backbone has no .language_model")
-        return lm
+        inner = getattr(lm, "model", None)
+        return inner if inner is not None else lm
+
+    def _get_lm_head(self):
+        """Return the standalone lm_head Linear, which we'll apply to a tiny
+        sub-slice of hidden states to compute logits over the action vocab."""
+        lm = getattr(self._unwrap(), "language_model", None)
+        if lm is None:
+            raise AttributeError("backbone has no .language_model")
+        return lm.lm_head
