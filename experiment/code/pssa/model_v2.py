@@ -113,7 +113,8 @@ class PSSAVLAv2(nn.Module):
         """Pull action norm stats + vocab size from the OpenVLA backbone once."""
         inner = self._unwrap()
         cfg = inner.config
-        self._vocab_size = cfg.vocab_size  # 32000
+        # vocab_size lives on the inner Llama config, not the OpenVLA wrapper
+        self._vocab_size = inner.language_model.config.vocab_size  # 32000
         self._n_action_bins = cfg.n_action_bins  # 256
         stats = cfg.norm_stats[self.unnorm_key]["action"]
         # q01/q99 are the unnormalization bounds; mask indicates which dims to unnormalize
