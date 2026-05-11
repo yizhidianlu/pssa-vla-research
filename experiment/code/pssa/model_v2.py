@@ -217,42 +217,60 @@ class PSSAVLAv2(nn.Module):
     def _step_action_logits(
         self,
         pse_tokens: torch.Tensor,        # (B, N, D)
-        ent_t: torch.Tensor,             # (B, 1, N, D)
-        rgb_t: torch.Tensor,             # (B, 3, H, W)
+        ent_t: torch.Tensor,             # (B, 1, N, D) — unused
+        rgb_t: torch.Tensor,             # (B, 3, H, W), values in [0, 1]
         language: list[str],             # B-list
     ) -> torch.Tensor:
-        """v1: tokenize language + run vision + concat PSE prefix + LLM forward.
+        """v2: full DinoSigLIP vision + text + PSE prefix → LLM → action_head.
 
-        Sequence: [text_embeds | pse_tokens (N) | image_embeds] → LLM →
+        Sequence: [text_embeds | image_embeds (256) | pse_tokens (N)] → LLM →
         last hidden state → action_head → (B, action_dim).
         """
         if self.processor is None:
-            raise RuntimeError("PSSAVLAv2 needs a processor for v1")
+            raise RuntimeError("PSSAVLAv2 needs a processor for v2")
         device = rgb_t.device
         B = rgb_t.shape[0]
 
-        # 1) tokenize language (batched, padded)
+        # 1) RGB tensor → PIL list (processor expects PIL, handles 128→224 resize)
+        from PIL import Image
+        import numpy as np
+        rgb_np = (rgb_t.detach().clamp(0, 1).permute(0, 2, 3, 1).cpu()
+                  .float().numpy() * 255).astype(np.uint8)
+        pil_imgs = [Image.fromarray(rgb_np[i]) for i in range(B)]
+
+        # 2) Prompts
         prompts = [f"In: what action to {ln.strip().lower()}? Out:" for ln in language]
-        tok = self.processor.tokenizer(
-            prompts, return_tensors="pt", padding=True,
-            truncation=True, max_length=64,
-        ).to(device)
-        text_embeds = self._get_input_embeddings()(tok.input_ids)   # (B, L, D)
 
-        # 2) Vision is intentionally bypassed in v1: OpenVLA's DinoSigLIP
-        # backbone wants (B, 6, 224, 224) with its own preprocessing pipeline,
-        # which doesn't match our raw LIBERO demo (B, 3, 128, 128). PSE-Tok
-        # already encodes visual info from rgb_init into N entity tokens —
-        # we feed [text + PSE] only. v2 will integrate the proper preprocessor.
+        # 3) Processor produces input_ids + attention_mask + pixel_values (B,6,224,224)
+        inputs = self.processor(
+            text=prompts, images=pil_imgs, return_tensors="pt", padding=True,
+        )
+        pixel_values = inputs["pixel_values"].to(device, dtype=torch.bfloat16)
+        input_ids = inputs["input_ids"].to(device)
+        attn_text = inputs["attention_mask"].to(device)
 
-        # 3) PSE prefix (cast to LLM dtype)
+        # 4) Vision: backbone frozen — but we keep gradients flowing for LLM
+        #    (vision_backbone has requires_grad_(False) so storage is light)
+        inner = self._unwrap()
+        with torch.no_grad():  # vision is frozen; saves activation memory
+            img_feats = inner.vision_backbone(pixel_values)         # (B, 256, 2176)
+            image_embeds = inner.projector(img_feats)               # (B, 256, D)
+        # Detach to be explicit (projector is also frozen)
+        image_embeds = image_embeds.detach()
+
+        # 5) Text embeds (input_embeddings is frozen unless LoRA wraps it)
+        text_embeds = self._get_input_embeddings()(input_ids)       # (B, L, D)
+
+        # 6) PSE prefix (cast to LLM dtype)
         pse_embeds = pse_tokens.to(text_embeds.dtype)
 
-        # 4) concat + LLM forward
-        inputs_embeds = torch.cat([text_embeds, pse_embeds], dim=1)
-        attn = torch.ones(inputs_embeds.shape[:2], device=device,
-                          dtype=tok.attention_mask.dtype)
-        attn[:, : tok.attention_mask.shape[1]] = tok.attention_mask
+        # 7) Concat: [text | image | PSE]
+        inputs_embeds = torch.cat([text_embeds, image_embeds, pse_embeds], dim=1)
+        attn_img = torch.ones(image_embeds.shape[:2], device=device, dtype=attn_text.dtype)
+        attn_pse = torch.ones(pse_embeds.shape[:2], device=device, dtype=attn_text.dtype)
+        attn = torch.cat([attn_text, attn_img, attn_pse], dim=1)
+
+        # 8) LLM forward
         llm = self._get_llm()
         out = llm(inputs_embeds=inputs_embeds, attention_mask=attn)
         last_hidden = out.last_hidden_state[:, -1]                  # (B, D)
