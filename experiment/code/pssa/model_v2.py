@@ -125,49 +125,65 @@ class PSSAVLAv2(nn.Module):
     # ---- action discretization helpers ------------------------------------
 
     def _cache_action_stats(self) -> None:
-        """Pull action norm stats + vocab size from the OpenVLA backbone once."""
+        """Pull action norm stats + vocab sizes from the OpenVLA backbone once.
+
+        Key distinction (root cause of Gate-1 R1 failure): OpenVLA uses
+            action_vocab_boundary = text_config.vocab_size - pad_to_multiple_of
+        as the action-token anchor, NOT the inner Llama vocab_size. For OpenVLA-
+        7B-libero this gives 32064 - 64 = 32000. Action token IDs sit in
+            [action_vocab_boundary - 256, action_vocab_boundary - 1]
+        = [31744, 31999]. The lm_head outputs the full padded vocab 32064.
+
+        Bin centers also follow OpenVLA's exact scheme: 256 bin edges in [-1, 1]
+        produce 255 bin centers (NOT 256) for de-discretization.
+        """
         inner = self._unwrap()
         cfg = inner.config
-        # vocab_size lives on the inner Llama config, not the OpenVLA wrapper
-        self._vocab_size = inner.language_model.config.vocab_size  # 32000
+        # Full lm_head output vocab (32064 for OpenVLA-7B)
+        self._lm_vocab_size = inner.language_model.config.vocab_size
+        # Action-token anchor (32000 = 32064 - 64)
+        self._action_vocab_boundary = (
+            cfg.text_config.vocab_size - cfg.pad_to_multiple_of
+        )
         self._n_action_bins = cfg.n_action_bins  # 256
         stats = cfg.norm_stats[self.unnorm_key]["action"]
-        # q01/q99 are the unnormalization bounds; mask indicates which dims to unnormalize
-        self._action_q01 = np.array(stats["q01"], dtype=np.float32)  # (7,)
+        self._action_q01 = np.array(stats["q01"], dtype=np.float32)
         self._action_q99 = np.array(stats["q99"], dtype=np.float32)
         if "mask" in stats:
             self._action_mask = np.array(stats["mask"], dtype=bool)
         else:
             self._action_mask = np.ones_like(self._action_q01, dtype=bool)
-        # Bin edges in [-1, 1]
-        self._bin_edges = np.linspace(-1.0, 1.0, self._n_action_bins + 1)
-        self._bin_centers = (self._bin_edges[:-1] + self._bin_edges[1:]) / 2.0
-        self._action_dim = len(self._action_q01)  # 7
+        # OpenVLA's exact discretization scheme: 256 edges -> 255 centers
+        self._bins = np.linspace(-1.0, 1.0, self._n_action_bins)
+        self._bin_centers = (self._bins[:-1] + self._bins[1:]) / 2.0
+        self._action_dim = len(self._action_q01)
 
     def _discretize_action(self, action: torch.Tensor) -> torch.Tensor:
-        """Continuous action (B, 7) -> token IDs (B, 7) in [vocab-256, vocab-1].
+        """Continuous action (B, 7) -> token IDs (B, 7) in [31744, 31999].
 
-        Follows OpenVLA's convention: token_id = vocab_size - bin_index - 1
-        where bin_index in [0, n_action_bins-1].
+        OpenVLA's exact scheme (from prismatic.vla.action_tokenizer):
+            discretized = np.digitize(clipped_normalized, self.bins)
+            token_id   = action_vocab_boundary - discretized
+        Range: action=-1 -> token_id=31999 ; action=+1 -> token_id=31744.
         """
         device = action.device
         a_np = action.detach().cpu().float().numpy()  # (B, 7)
 
-        # Unnormalize -> normalize. The model was finetuned on action-token-ed
-        # continuous actions. Map back: normalized = 2 * (a - q01) / (q99 - q01) - 1
         q01 = self._action_q01[None, :]
         q99 = self._action_q99[None, :]
         normalized = 2.0 * (a_np - q01) / np.clip(q99 - q01, 1e-8, None) - 1.0
-        # For masked dims (typically all True for libero), keep normalized; for
-        # unmasked dims (none here, but defensive), use raw action.
         mask = self._action_mask[None, :]
         normalized = np.where(mask, normalized, a_np)
         normalized = np.clip(normalized, -1.0, 1.0)
-        # digitize -> bin_index in [0, 255]
-        bin_idx = np.digitize(normalized, self._bin_edges) - 1
-        bin_idx = np.clip(bin_idx, 0, self._n_action_bins - 1).astype(np.int64)
-        # token_id = vocab_size - bin_idx - 1
-        token_ids = self._vocab_size - bin_idx - 1
+        # digitize against 256 bin edges -> returns values in [1, 256] for clipped [-1, 1]
+        discretized = np.digitize(normalized, self._bins)
+        token_ids = self._action_vocab_boundary - discretized
+        # Defensive clip to action token range [boundary - 256, boundary - 1]
+        token_ids = np.clip(
+            token_ids,
+            self._action_vocab_boundary - self._n_action_bins,
+            self._action_vocab_boundary - 1,
+        ).astype(np.int64)
         return torch.from_numpy(token_ids).to(device)
 
     # ---- training step ----------------------------------------------------
@@ -325,9 +341,9 @@ class PSSAVLAv2(nn.Module):
         # i.e. hidden_states[:, -8 : -1] -> predicts targets, which are at positions [-7..-1] = action_token_ids.
         relevant = hidden_states[:, -8:-1]             # (B, 7, D)  positions of [empty, a0..a5]
         lm_head = self._get_lm_head()
-        logits = lm_head(relevant)                     # (B, 7, V) in lm_head dtype
+        logits = lm_head(relevant)                     # (B, 7, V_lm) in lm_head dtype
         loss = F.cross_entropy(
-            logits.float().reshape(-1, self._vocab_size),
+            logits.float().reshape(-1, self._lm_vocab_size),
             action_token_ids.reshape(-1),
         )
         return loss
@@ -376,12 +392,15 @@ class PSSAVLAv2(nn.Module):
         inner_lm = self._get_inner_transformer()
         lm_head = self._get_lm_head()
         gen_ids = []
+        action_lo = self._action_vocab_boundary - self._n_action_bins  # 31744
+        action_hi = self._action_vocab_boundary                         # 32000 (exclusive)
         for _ in range(self._action_dim):
             out = inner_lm(inputs_embeds=cur_embeds, attention_mask=cur_attn)
             last_hidden = out.last_hidden_state[:, -1:, :]              # (1, 1, D)
-            next_logits = lm_head(last_hidden).float().squeeze(1)       # (1, V)
+            next_logits = lm_head(last_hidden).float().squeeze(1)       # (1, V_lm)
+            # Restrict to the OpenVLA action-token slot [31744, 31999]
             mask = torch.full_like(next_logits, -float("inf"))
-            mask[:, self._vocab_size - self._n_action_bins : self._vocab_size] = 0.0
+            mask[:, action_lo:action_hi] = 0.0
             next_logits = next_logits + mask
             next_id = next_logits.argmax(dim=-1, keepdim=True)
             gen_ids.append(next_id.item())
@@ -392,13 +411,14 @@ class PSSAVLAv2(nn.Module):
                 dim=1,
             )
 
+        # OpenVLA's exact reverse map: bin_idx = clip(boundary - token_id - 1, 0, 254)
         token_ids = np.array(gen_ids, dtype=np.int64)
-        bin_idx = self._vocab_size - token_ids - 1
-        bin_idx = np.clip(bin_idx, 0, self._n_action_bins - 1)
+        discretized = self._action_vocab_boundary - token_ids
+        bin_idx = np.clip(discretized - 1, 0, self._bin_centers.shape[0] - 1)
         normalized = self._bin_centers[bin_idx]
-        unnormed = self._action_q01 + (normalized + 1.0) / 2.0 * (
+        unnormed = 0.5 * (normalized + 1.0) * (
             self._action_q99 - self._action_q01
-        )
+        ) + self._action_q01
         action = np.where(self._action_mask, unnormed, normalized)
         return action.astype(np.float32)
 
