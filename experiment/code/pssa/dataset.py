@@ -239,7 +239,11 @@ class LIBEROEpisodeDataset(IterableDataset):
                 ):
                     init_slice = np.asarray(arr[:init_end])
                     win_slice = np.asarray(arr[win_start:win_end])
-                    return np.concatenate([init_slice, win_slice], axis=0)
+                    out = np.concatenate([init_slice, win_slice], axis=0)
+                    # Cache stores uint8 to save disk; PSE encoder consumes float32.
+                    if out.dtype != np.float32:
+                        out = out.astype(np.float32)
+                    return out
             except Exception:
                 pass  # fall through to clip-keyed cache
 

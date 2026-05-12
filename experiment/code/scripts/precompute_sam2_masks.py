@@ -133,9 +133,11 @@ def main() -> int:
 
             # Atomic write. np.save would auto-append .npy if path doesn't
             # end in .npy; use file object to keep the exact tmp name.
+            # uint8 (0/1) instead of float32 — masks are binary post-threshold,
+            # this gives 4x smaller cache. 50GB volume only has ~13GB free.
             tmp = cpath.with_suffix(".npy.tmp")
             with open(tmp, "wb") as fh:
-                np.save(fh, masks.astype(np.float32))
+                np.save(fh, masks.astype(np.uint8))
             tmp.replace(cpath)
             done += 1
             total_elapsed = time.perf_counter() - t0
