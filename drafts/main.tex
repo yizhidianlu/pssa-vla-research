@@ -178,13 +178,17 @@ Figure~\ref{fig:framework} gives an end-to-end view.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.92\linewidth]{../figures/framework.pdf}
-  \caption{\method end-to-end. PSE-Tok keeps an episode-level Persistent
-  Gaussian Splat of scene entities and emits identity-stable tokens at
-  every step. The VLA action head conditions on these tokens in addition
-  to per-frame ViT tokens. CRED watches the cross-time consistency
-  residual; sustained violations freeze the action and trigger a replan
-  from the persistent prior.}
+  \includegraphics[width=0.95\linewidth]{../figures/framework.pdf}
+  \caption{\method v2c as implemented. The CNN PSE-Tok encoder
+  consumes the initial $T_0$ frames and emits $N{=}8$ entity tokens
+  per episode. The OpenVLA-7B backbone is kept frozen; we train LoRA
+  adapters on its $W_q, W_v$ projections and the PSE encoder. The
+  sequence assembled into the LLM is the OpenVLA canonical
+  $[\texttt{BOS}\,|\,\text{image}(256)\,|\,\text{PSE}(8)\,|\,\text{text}]$,
+  followed by an empty-pad token and the autoregressive 7-token
+  action decode into the action vocabulary slot
+  $[31{,}744, 31{,}999]$. Eval applies Phase-1's gripper-channel fix to
+  the de-discretized action.}
   \label{fig:framework}
 \end{figure}
 
@@ -288,7 +292,24 @@ We instantiate the architectural skeleton of \method on top of the
 (Section~\ref{sec:method}), insert $N{=}8$ randomly-initialized PSE entity
 tokens at the OpenVLA-canonical sequence position
 $[\texttt{BOS} \,|\, \text{image}(256) \,|\, \text{PSE}(N) \,|\, \text{text}]$,
-and evaluate without any supervised fine-tuning. This isolates whether
+and evaluate without any supervised fine-tuning. Figure~\ref{fig:layouts}
+contrasts this layout with two alternatives we ablated (PSE before vs.
+after the action decode point); only \emph{after\_image} retains usable SR
+on the untrained backbone.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{../figures/sequence_layout.pdf}
+  \caption{Sequence layouts compared at Gate-1. (a) The canonical
+  OpenVLA layout the backbone was finetuned on. (b) \method
+  variant\_A inserts an 8-token PSE prefix between image and text,
+  shifting downstream RoPE offsets by 8. (c) \method variant\_B
+  inserts the PSE prefix after text, shifting only the action
+  positions. Gate-1 untrained SR on LIBERO-Spatial task 0 (10
+  rollouts) shows variant\_A is the only PSE-injection position that
+  preserves a usable policy.}
+  \label{fig:layouts}
+\end{figure} This isolates whether
 the PSE prefix \emph{by itself} perturbs the action policy of the frozen
 backbone. Table~\ref{tab:pse_prefix_untrained} reports the per-task
 success rate on LIBERO-Spatial across the same $10\times10$ rollout
@@ -323,13 +344,27 @@ pulled from the persistent disk on the next machine boot.}
 language at the OpenVLA-canonical position degrades the per-task SR by
 $\sim$26\,pp on average, with task-level variance much higher than the
 no-prefix baseline (tasks 5 and 8 collapse to 10\%, while tasks 1 and 7
-remain at or above 80\%). The prefix is therefore \emph{not freely
-benign}: it occupies eight position slots between image and text,
-shifting downstream RoPE offsets and disrupting cross-modal attention
-patterns the backbone learned during finetuning. The remaining $54\%$
-SR floor, however, demonstrates that the backbone retains useful
-behavior under modest position-embedding perturbation; this is the
-prerequisite for the PSE prefix to ever \emph{help} once trained.
+remain at or above 80\%); see Figure~\ref{fig:sr_bars} for the per-task
+breakdown alongside the trained-run row. The prefix is therefore \emph{not
+freely benign}: it occupies eight position slots between image and
+text, shifting downstream RoPE offsets and disrupting cross-modal
+attention patterns the backbone learned during finetuning. The
+remaining $54\%$ SR floor, however, demonstrates that the backbone
+retains useful behavior under modest position-embedding perturbation;
+this is the prerequisite for the PSE prefix to ever \emph{help} once
+trained.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.95\linewidth]{../figures/bar_pertask_sr.pdf}
+  \caption{Per-task success rate on LIBERO-Spatial. Blue: Phase-1
+  OpenVLA-FT baseline (no PSE, $n=50$ rollouts/task). Orange:
+  untrained \method variant\_A (PSE after\_image, random init,
+  $n=10$/task). Purple: best trained \method run (\texttt{autonomy\_v2c-071037},
+  lr=$2\!\times\!10^{-4}$, $n=10$/task). Training degrades the per-task
+  SR substantially below the untrained PSE row for all 10 tasks.}
+  \label{fig:sr_bars}
+\end{figure}
 
 \subsection{Supervised training of PSE+LoRA degrades the policy}
 \label{sec:exp_train_degrades}
@@ -349,7 +384,24 @@ mean SR of $22\%$ on LIBERO-Spatial, with per-task range 0--50\%.
 Lower-lr variants plateau in CE loss in the 2.5--3.5 range without
 recovering the baseline SR; CE never approaches the
 $\sim$0 we would expect from a backbone matched to its own training
-distribution.
+distribution. Figure~\ref{fig:loss} overlays the loss trajectories of
+four representative configurations against the 256-action-token random
+baseline.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.95\linewidth]{../figures/loss_trajectory.pdf}
+  \caption{Action-token CE loss trajectories across 4 training
+  configurations of \method. The v1.1 / v2 / v2c-canonical curves
+  asymptote at meaningfully different floors that do \emph{not}
+  correlate with eval SR: v1.1 reaches CE${\approx}0.29$ but evaluates
+  at 0\% SR; v2c-canonical asymptotes at CE${\approx}2.1$ and yields the
+  best eval SR (22\%). Dashed gray line: random over the 256-action
+  vocab ($\log 256 \approx 5.55$). No \method configuration approaches
+  the CE${\sim}0$ floor a backbone matched to its own training
+  distribution would produce.}
+  \label{fig:loss}
+\end{figure}
 
 \begin{table}[t]
 \centering

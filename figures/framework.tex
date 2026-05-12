@@ -1,7 +1,8 @@
-% Framework figure for PSSA-VLA — TikZ source, LaTeX-renderable standalone.
+% Framework figure for PSSA-VLA v2c (as actually implemented).
 % Compile with:   pdflatex framework.tex
 \documentclass[tikz,border=10pt]{standalone}
 \usepackage{tikz}
+\usepackage{xcolor}
 \usetikzlibrary{positioning,arrows.meta,shapes,fit,calc,backgrounds}
 
 \definecolor{cVis}{RGB}{56,103,214}
@@ -9,63 +10,86 @@
 \definecolor{cPSE}{RGB}{210,90,40}
 \definecolor{cAct}{RGB}{120,60,160}
 \definecolor{cCRED}{RGB}{200,40,80}
+\definecolor{cFrozen}{RGB}{160,160,160}
 
 \begin{document}
 \begin{tikzpicture}[
-    node distance=8mm and 12mm,
+    node distance=7mm and 10mm,
     every node/.style={font=\small},
-    box/.style={draw,rounded corners=2pt,thick,minimum width=24mm,
+    box/.style={draw,rounded corners=2pt,thick,minimum width=22mm,
                 minimum height=8mm,align=center,fill=white},
-    bigbox/.style={draw,rounded corners=3pt,thick,minimum width=44mm,
+    bigbox/.style={draw,rounded corners=3pt,thick,minimum width=40mm,
                    minimum height=10mm,align=center,fill=white},
+    frozenbox/.style={draw,rounded corners=2pt,thick,minimum width=22mm,
+                      minimum height=8mm,align=center,fill=cFrozen!15,
+                      dashed},
     arrow/.style={-Latex,thick},
     dashedarrow/.style={-Latex,thick,dashed},
 ]
 
 % --- Inputs ---
-\node[box,fill=cVis!12]   (rgb)   at (0,0)        {RGB stream\\$o_t$};
-\node[box,fill=cLang!12,below=of rgb] (lang) {Instruction $\ell$};
-\node[box,fill=cVis!12,below=of lang] (depth) {Depth $d_t$};
+\node[box,fill=cVis!12]   (rgb)   at (0,0)        {RGB obs.\ $o_t$};
+\node[box,fill=cLang!12,below=of rgb] (lang) {Lang.\ instr.\ $\ell$};
+\node[box,fill=cVis!12,below=of lang] (rgbinit) {Init frames\\$o_{0:T_0}$};
 
-% --- PSE-Tok ---
-\node[bigbox,fill=cPSE!12,right=of rgb] (sam) {SAM-2\\masks @ $t<T_0$};
-\node[bigbox,fill=cPSE!18,right=of sam] (pgs) {Persistent Gaussian Splat\\(POGS-style)};
-\node[bigbox,fill=cPSE!25,right=of pgs] (psetok) {PSE entity tokens\\$\{e^i_t\}_{i=1}^{N}$};
-\node[draw,thick,dashed,rounded corners,fit=(sam)(pgs)(psetok),
-      label={[font=\small,anchor=west]above left:PSE-Tok}] (psebox) {};
+% --- PSE encoder ---
+\node[bigbox,fill=cPSE!18,right=14mm of rgbinit] (pse_enc) {PSE-Tok CNN encoder\\(trainable)};
+\node[bigbox,fill=cPSE!28,right=of pse_enc] (pse_tok) {PSE entity tokens\\$\{e^i\}_{i=1}^{N=8}$};
 
-% --- VLM grounding (replaced) ---
-\node[bigbox,fill=cVis!12,below=10mm of pgs] (vit) {ViT frame tokens};
+% --- Image + text path (frozen OpenVLA backbone) ---
+\node[frozenbox,fill=cVis!18,right=14mm of rgb] (dinosiglip) {DinoSigLIP\\(frozen)};
+\node[frozenbox,fill=cVis!12,right=of dinosiglip] (proj) {Projector\\(frozen)};
+\node[box,fill=cVis!22,right=of proj] (img_emb) {Image embeds\\$(256, D)$};
 
-% --- Action head ---
-\node[bigbox,fill=cAct!18,right=14mm of psetok] (head) {VLA action head};
-\node[box,fill=cAct!28,right=of head] (act) {$a_t$};
+\node[frozenbox,fill=cLang!18,right=14mm of lang] (tok) {Llama tokenizer\\(frozen)};
+\node[box,fill=cLang!22,right=of tok] (text_emb) {Text embeds};
 
-% --- CRED ---
-\node[bigbox,fill=cCRED!15,below=14mm of head] (cred) {CRED\\residual gate};
-\node[box,fill=cCRED!28,below=of cred] (replan) {Freeze + replan};
+% --- Sequence assembly ---
+\node[bigbox,fill=white,thick,right=10mm of img_emb,minimum width=52mm,
+      minimum height=14mm] (seq) {%
+      $[\,\texttt{BOS}\,|\,\text{image}(256)\,|\,\text{PSE}(8)\,|\,\text{text}(L-1)\,]$};
+
+% --- Llama + LoRA on q/v ---
+\node[bigbox,fill=cAct!12,below=10mm of seq,minimum width=52mm] (llama) {%
+    Llama-7B (frozen) $+$ LoRA on $W_q, W_v$};
+
+% --- Action token decode ---
+\node[bigbox,fill=cAct!22,below=of llama] (act_decode) {%
+    Autoregressive 7-token decode\\into action vocab $[31744,31999]$};
+\node[box,fill=cAct!32,right=of act_decode] (act) {$a_t \in \mathbb{R}^7$};
+
+% --- Action target during training (teacher forcing) ---
+\node[box,fill=cAct!10,right=of seq.east,xshift=2mm,dashed] (target) {%
+    teacher-forced\\action targets};
 
 % Edges
-\draw[arrow] (rgb) -- (sam);
-\draw[arrow] (rgb.east) to[bend right=18] (psetok.west |- vit.north);
-\draw[arrow] (depth.east) to[bend right=24] (sam.south);
-\draw[arrow] (sam) -- (pgs);
-\draw[arrow] (pgs) -- (psetok);
-\draw[arrow] (psetok) -- (head);
-\draw[arrow] (vit) -| ($(head.south west)+(0,-1mm)$);
-\draw[arrow] (lang.east) -| ($(head.south west)+(2mm,-1mm)$);
-\draw[arrow] (head) -- (act);
+\draw[arrow] (rgb) -- (dinosiglip);
+\draw[arrow] (dinosiglip) -- (proj);
+\draw[arrow] (proj) -- (img_emb);
+\draw[arrow] (lang) -- (tok);
+\draw[arrow] (tok) -- (text_emb);
+\draw[arrow] (rgbinit) -- (pse_enc);
+\draw[arrow] (pse_enc) -- (pse_tok);
 
-% Cross-time consistency loop
-\draw[dashedarrow] (psetok.south) |- node[pos=0.75,below,font=\scriptsize]{$\hat f^i_{t+1}=f^i_t+\Delta(a_t)$} (cred.east);
-\draw[dashedarrow] (act.south) |- (cred.east);
-\draw[arrow] (cred) -- (replan);
-\draw[dashedarrow,red!70!black] (cred.west) -| ($(head.south)+(-2mm,-2mm)$);
+\draw[arrow] (img_emb) -- (seq);
+\draw[arrow] (pse_tok.east) to[bend right=12] (seq.south);
+\draw[arrow] (text_emb.east) to[bend left=15] (seq.east);
 
-% Title labels
-\node[font=\small\bfseries,above=2mm of psebox] {1. Persistent scene-entity grounding};
-\node[font=\small\bfseries,above=2mm of head]   {2. VLA action head with PSE prefix};
-\node[font=\small\bfseries,below=2mm of replan] {3. Cross-time consistency $\Rightarrow$ error correction};
+\draw[arrow] (seq) -- (llama);
+\draw[arrow] (llama) -- (act_decode);
+\draw[arrow] (act_decode) -- (act);
+
+% Training-only path
+\draw[dashedarrow,gray] (target.south) |- (act_decode.north east);
+
+% Phase-1 eval gripper fix annotation
+\node[font=\scriptsize\itshape,below=2mm of act] {$+$ Phase-1\\gripper fix};
+
+% Titles
+\node[font=\small\bfseries,above=2mm of seq] {Sequence assembly};
+\node[font=\small\bfseries,above=2mm of pse_tok] {1. PSE prefix (trainable)};
+\node[font=\small\bfseries,above=2mm of img_emb] {2. Frozen OpenVLA backbone};
+\node[font=\small\bfseries,below=2mm of act_decode] {3. Native OpenVLA action token CE};
 
 \end{tikzpicture}
 \end{document}
