@@ -168,24 +168,21 @@ class PSSAVLAv2(nn.Module):
     def _discretize_action(self, action: torch.Tensor) -> torch.Tensor:
         """Continuous action (B, 7) -> token IDs (B, 7) in [31744, 31999].
 
-        OpenVLA's exact scheme (from prismatic.vla.action_tokenizer):
-            discretized = np.digitize(clipped_normalized, self.bins)
-            token_id   = action_vocab_boundary - discretized
-        Range: action=-1 -> token_id=31999 ; action=+1 -> token_id=31744.
+        Matches OpenVLA's ActionTokenizer (prismatic/vla/action_tokenizer.py):
+            action = np.clip(action, -1, +1)
+            discretized = np.digitize(action, bins=linspace(-1, 1, 256))
+            token_id = vocab_boundary - discretized
+
+        NOTE: OpenVLA does NOT apply q01/q99 normalization at training time.
+        The q01/q99 stretch is the INVERSE map at inference (predict_action)
+        — it expands the model's normalized [-1, 1] output to the env's
+        action range. Training simply clips raw demo actions to [-1, 1].
         """
         device = action.device
         a_np = action.detach().cpu().float().numpy()  # (B, 7)
-
-        q01 = self._action_q01[None, :]
-        q99 = self._action_q99[None, :]
-        normalized = 2.0 * (a_np - q01) / np.clip(q99 - q01, 1e-8, None) - 1.0
-        mask = self._action_mask[None, :]
-        normalized = np.where(mask, normalized, a_np)
-        normalized = np.clip(normalized, -1.0, 1.0)
-        # digitize against 256 bin edges -> returns values in [1, 256] for clipped [-1, 1]
-        discretized = np.digitize(normalized, self._bins)
+        a_np = np.clip(a_np, -1.0, 1.0)
+        discretized = np.digitize(a_np, self._bins)
         token_ids = self._action_vocab_boundary - discretized
-        # Defensive clip to action token range [boundary - 256, boundary - 1]
         token_ids = np.clip(
             token_ids,
             self._action_vocab_boundary - self._n_action_bins,
