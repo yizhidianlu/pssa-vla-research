@@ -239,12 +239,17 @@ class SAM2Masker:
         # 3) Video propagation
         try:
             masks_tnhw = self._propagate_video(rgb_seq, prompts, n_entities)
-        except Exception:
-            # Video predictor failed (e.g. shape mismatch, OOM); fall
-            # back to first-frame mask repeated across time. Slightly
-            # better than zeros — at least the encoder sees a non-trivial
-            # spatial support — but XTC will be ~0 again. Caller can
-            # check `masks_seq.var()` to detect this regression.
+        except Exception as exc:
+            # Video predictor failed — surface the error rather than
+            # silently fall back. Frame-0 broadcast gives temporal var=0
+            # which kills XTC; we want to see WHY propagation failed.
+            import traceback
+            import os
+            sentinel = os.environ.get("SAM2_PROP_FALLBACK_OK", "0") == "1"
+            if not sentinel:
+                print("[SAM2Masker] propagate_video failed:", repr(exc))
+                traceback.print_exc()
+                raise
             first_masks = np.zeros((n_entities, H, W), dtype=np.float32)
             for i, rec in enumerate(masks_records):
                 seg = rec["segmentation"]
