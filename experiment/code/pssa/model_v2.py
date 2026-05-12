@@ -267,7 +267,13 @@ class PSSAVLAv2(nn.Module):
         rgb_np = (rgb_t.detach().clamp(0, 1).permute(0, 2, 3, 1).cpu()
                   .float().numpy() * 255).astype(np.uint8)
         pil_imgs = [Image.fromarray(rgb_np[i]) for i in range(B)]
-        prompts = [f"In: what action to {ln.strip().lower()}? Out:" for ln in language]
+        # Match OpenVLA's exact training-time prompt format (per Phase-1
+        # run_libero_eval.py which achieves 80.2% SR). Wording AND newline
+        # before "Out:" matter for the Llama tokenizer.
+        prompts = [
+            f"In: What action should the robot take to {ln.strip().lower()}?\nOut:"
+            for ln in language
+        ]
 
         inputs = self.processor(
             text=prompts, images=pil_imgs, return_tensors="pt", padding=True,
