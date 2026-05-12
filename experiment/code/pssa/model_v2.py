@@ -47,7 +47,7 @@ class PSEEntityEncoder(nn.Module):
     """
 
     def __init__(self, n_entities: int = 8, hidden_dim: int = 4096,
-                 cnn_dim: int = 256) -> None:
+                 cnn_dim: int = 256, zero_init_output: bool = False) -> None:
         super().__init__()
         self.n_entities = n_entities
         self.hidden_dim = hidden_dim
@@ -62,6 +62,13 @@ class PSEEntityEncoder(nn.Module):
             nn.GELU(),
             nn.Linear(hidden_dim, hidden_dim),
         )
+        # Prefix-tuning trick: zero-init the FINAL linear so the encoder
+        # starts producing exactly-zero outputs. The model then trivially
+        # reproduces OpenVLA's behavior at step 0 and learns to inject
+        # nonzero PSE signal only when it improves the action-token CE.
+        if zero_init_output:
+            nn.init.zeros_(self.proj[2].weight)
+            nn.init.zeros_(self.proj[2].bias)
 
     def forward(self, rgb_init: torch.Tensor, masks_init: torch.Tensor) -> torch.Tensor:
         B, T0, _, H, W = rgb_init.shape

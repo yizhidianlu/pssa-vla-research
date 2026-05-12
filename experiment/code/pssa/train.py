@@ -103,6 +103,7 @@ def main(cfg: DictConfig) -> None:
         n_entities=cfg.model.pse.n_entities,
         hidden_dim=cfg.model.pse.hidden_dim,
         cnn_dim=cfg.model.pse.cnn_dim,
+        zero_init_output=cfg.model.pse.get("zero_init_output", False),
     )
     model = PSSAVLAv2(
         backbone=backbone,
