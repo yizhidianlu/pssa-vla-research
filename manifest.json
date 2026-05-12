@@ -5,7 +5,7 @@
   "topic_brief": "Move VLA grounding from single-frame region-level alignment to temporally-consistent scene-level entity tracking; use that consistency to detect and correct execution-time errors in long-horizon, multi-stage, dynamic manipulation.",
   "pipeline_mode": "deep",
   "paper_mode": "original_research",
-  "current_stage": "phase2_v1.1_eval_complete_xtc_dead_in_v1",
+  "current_stage": "phase2_v2c_22pct_breakthrough_tuning_lr_for_baseline_match",
   "started_at": "2026-05-09T00:04:00+08:00",
   "stages": {
     "init": {
@@ -204,8 +204,37 @@
     }
   },
   "checkpoints": {
-    "last": "phase2_v1.1_complete_xtc_numerically_dead",
-    "next": "phase2_v2_dinosiglip_integration",
+    "last": "phase2_v2c_22pct_first_nonzero_result_after_5_bug_fixes",
+    "next": "phase2_v2c_lr_tune_for_baseline_match",
+    "phase2_v2c_findings": {
+      "doc": "drafts/PSSA_V2C_GATE_FINDINGS.md",
+      "five_bugs_fixed_in_v2c": [
+        "sequence layout backwards (v2c-r1: text|image|PSE → r2: BOS|image|text|PSE)",
+        "action vocab boundary off by pad_to_multiple_of (32064 vs 32000)",
+        "bin scheme 256 vs 255 centers (OpenVLA uses 255)",
+        "DDP LR schedule doubled (T_max * num_processes fix)",
+        "LIBERO {-1,+1} vs OpenVLA [0,1] gripper convention (root cause of 0% trained)"
+      ],
+      "gate1_R3_untrained_baseline": {
+        "control_no_pse": 0.30,
+        "variant_A_pse_after_image": 0.80,
+        "variant_B_pse_before_action": 0.40,
+        "note": "10-rollout task-0 only; variant_A wins"
+      },
+      "gate3_first_trained_run": {
+        "dir": "experiment/runs/autonomy_v2c-20260512-071037",
+        "config": "variant_A (PSE after_image), n_entities=8, lr=2e-4, 3000 steps, bs=4 effective",
+        "spatial_100_rollout_sr": 0.22,
+        "per_task_sr": {"0": 0.1, "1": 0.5, "2": 0.1, "3": 0.2, "4": 0.1, "5": 0.0, "6": 0.5, "7": 0.3, "8": 0.3, "9": 0.1},
+        "interpretation": "training drifted from OpenVLA's good policy (80% untrained → 22% trained); lr too high"
+      },
+      "in_progress": {
+        "dir": "experiment/runs/autonomy_v2c_conservative-20260512-134602",
+        "config_change": "lr 2e-4 → 2e-5 (10x smaller, single-knob change)",
+        "hypothesis": "preserve OpenVLA baseline by minimizing PSE+LoRA perturbation",
+        "eta": "~3.5 hr (training 2.5 hr + eval 1 hr)"
+      }
+    },
     "phase2_scope": "implement PSSA action head training (PSE-Tok + XTC-Loss + CRED) on top of frozen OpenVLA backbone, train on LIBERO demo data",
     "phase2_estimate": "~300 lines code + ~6-12 GPU-hr training (¥50-100)",
     "phase2_v1.1_done": "Training pipeline validated end-to-end. Both baseline (lambda_xtc=0.1) and ablation (lambda_xtc=0) hit 0/100 Spatial SR. XTC loss < 5e-5 throughout — needs v2 vision path to fire.",
