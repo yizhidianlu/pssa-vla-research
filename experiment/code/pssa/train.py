@@ -121,6 +121,8 @@ def main(cfg: DictConfig) -> None:
         window_len=cfg.data.window_len,
         n_init_frames=cfg.data.n_init_frames,
         n_entities=cfg.model.pse.n_entities,
+        use_sam2_masks=cfg.data.get("use_sam2_masks", False),
+        sam2_cache_dir=cfg.data.get("sam2_cache_dir", None),
     )
     train_loader = DataLoader(
         train_ds,

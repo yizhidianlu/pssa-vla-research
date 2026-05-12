@@ -7,6 +7,11 @@ data:
   window_len: 16          # frames per training window
   n_init_frames: 4        # T0 frames to seed PSE-Tok
   num_workers: 2
+  # SAM-2 per-frame masks for §5.6 follow-up 1 (operational XTC). When
+  # false, the dataset yields all-ones placeholder masks and XTC collapses
+  # to ~0 — keep false to reproduce v2c baselines.
+  use_sam2_masks: false
+  sam2_cache_dir: /root/autodl-tmp/sam2_cache
 
 model:
   id: openvla/openvla-7b-finetuned-libero-spatial

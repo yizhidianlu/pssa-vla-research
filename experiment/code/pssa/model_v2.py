@@ -201,24 +201,40 @@ class PSSAVLAv2(nn.Module):
         rgb_seq = batch["rgb_seq"]
         actions = batch["actions"]              # (B, T, 7) continuous
         masks_init = batch["masks_init"]
+        # `masks_seq` is optional: present only when the dataset is built
+        # with `use_sam2_masks=True`. When present it supplies real
+        # per-frame entity masks for the XTC encoding path so that
+        # `entity_seq[:, t+1] - entity_seq[:, t]` is non-trivial.
+        masks_seq = batch.get("masks_seq", None)
         language = batch["language"]
 
         B, T = rgb_seq.shape[:2]
         device = rgb_seq.device
 
-        # Persistent entity tokens from init frames; empty (B, 0, D) if no-PSE
+        # Persistent entity tokens from init frames; empty (B, 0, D) if no-PSE.
+        # When SAM-2 masks are in use, `masks_init` actually spans (T0 + T)
+        # frames — slice down to the init prefix for the persistent encoding.
         if self.n_pse_tokens == 0:
             pse_tokens = rgb_seq.new_zeros((B, 0, self.pse_encoder.hidden_dim))
         else:
-            pse_tokens = self.pse_encoder(rgb_init, masks_init)        # (B, N, D)
+            T0 = rgb_init.shape[1]
+            masks_for_init = masks_init[:, :T0] if masks_init.shape[1] >= T0 else masks_init
+            pse_tokens = self.pse_encoder(rgb_init, masks_for_init)    # (B, N, D)
 
         loss_action = rgb_seq.new_zeros(())
         entity_seq = []
         for t in range(T):
             if self.n_pse_tokens > 0:
-                ent_t = self.pse_encoder(
-                    rgb_seq[:, t:t+1], masks_init[:, :1].expand(-1, 1, -1, -1, -1)
-                )
+                if masks_seq is not None:
+                    # Real SAM-2 per-frame mask for frame t.
+                    mask_t = masks_seq[:, t:t+1]                       # (B, 1, N, H, W)
+                else:
+                    # Legacy fallback: reuse the first init mask. This
+                    # makes ent_t identical across t (XTC ~ 0) but
+                    # preserves prior behavior when the dataset hasn't
+                    # been upgraded.
+                    mask_t = masks_init[:, :1].expand(-1, 1, -1, -1, -1)
+                ent_t = self.pse_encoder(rgb_seq[:, t:t+1], mask_t)
                 entity_seq.append(ent_t)
 
             loss_t = self._step_action_ce_loss(
