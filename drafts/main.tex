@@ -50,8 +50,8 @@ We report an empirical pipeline study on LIBERO-Spatial that establishes
 (a)~a reproducible 4-suite OpenVLA-FT baseline ($69.7\%$ mean SR over
 Spatial/Object/Goal/LONG), (b)~that the PSE prefix can be inserted at the
 OpenVLA-canonical position $[\texttt{BOS}|\text{image}|\text{PSE}|\text{text}]$
-without breaking the frozen backbone (54.4\% SR untrained over the first 9
-of 10 LIBERO-Spatial tasks, $-$25.8\,pp from the OpenVLA-FT ceiling),
+without breaking the frozen backbone (51.0\% SR untrained on 100
+LIBERO-Spatial rollouts, $-$29.2\,pp from the OpenVLA-FT ceiling),
 (c)~that naive supervised fine-tuning of the LoRA-adapted backbone plus
 PSE encoder on LIBERO-Spatial demonstrations consistently \emph{degrades}
 the trained SR ($22\%$ best, falling to $\le 10\%$ on lr/init sweeps), and
@@ -107,8 +107,8 @@ needs no external corrector.
         \emph{usable ceiling} our pipeline must beat.
   \item \textbf{Empirical study of PSE-prefix injection.} We show that
         a randomly-initialized PSE prefix at the OpenVLA-canonical
-        position preserves 54.4\% SR over the first 9 LIBERO-Spatial
-        tasks (un-trained, $-$25.8\,pp vs.\ no-prefix), and that naive
+        position preserves 51.0\% SR on 100 LIBERO-Spatial rollouts
+        (un-trained, $-$29.2\,pp vs.\ no-prefix), and that naive
         supervised LoRA+PSE training on LIBERO demonstrations degrades
         the SR below the un-trained baseline across five
         learning-rate / initialization / loss configurations.
@@ -331,13 +331,9 @@ pending machine restart at draft time).}
 Config & T0 & T1 & T2 & T3 & T4 & T5 & T6 & T7 & T8 & T9 & Mean \\
 \midrule
 OpenVLA-FT (no PSE) & 86 & 82 & 90 & 84 & 68 & 94 & 92 & 74 & 78 & 54 & 80.2 \\
-+ PSE prefix (untrained) & 70 & 80 & 30 & 70 & 40 & 10 & 80 & 100 & 10 & --- & 54.4$^\dagger$ \\
++ PSE prefix (untrained) & 70 & 80 & 30 & 70 & 40 & 10 & 80 & 100 & 10 & 20 & 51.0 \\
 \bottomrule
 \end{tabular}
-\\[2pt]
-{\footnotesize $^\dagger$Mean across the 9 completed tasks at draft
-submission; final 10-task aggregate to be updated once T9 result is
-pulled from the persistent disk on the next machine boot.}
 \end{table}
 
 \paragraph{Reading.} Inserting random PSE tokens between vision and
@@ -379,7 +375,7 @@ initialization (random vs.\ zero-init final projection), and ablate
 gripper-channel preprocessing and demonstration image orientation
 (Table~\ref{tab:trained_configs}). Five distinct training configurations
 (\texttt{autonomy\_v2c-*} runs) all yield SR strictly worse than the
-untrained baseline (54.4\%). The best trained run reaches a 100-rollout
+untrained baseline (51.0\%). The best trained run reaches a 100-rollout
 mean SR of $22\%$ on LIBERO-Spatial, with per-task range 0--50\%.
 Lower-lr variants plateau in CE loss in the 2.5--3.5 range without
 recovering the baseline SR; CE never approaches the
@@ -416,7 +412,7 @@ for any trained run.}
 \toprule
 Configuration & lr peak & PSE init & loss (step) & 100-rollout SR \\
 \midrule
-Untrained variant\_A (ceiling) & --- & random & --- & 54.4\%$^\dagger$ \\
+Untrained variant\_A (ceiling) & --- & random & --- & 51.0\% \\
 \midrule
 v1.1 (vision-bypass, broken layout) & $2\!\times\!10^{-4}$ & random & 0.29 (3000) & 0/100 \\
 v2 (continuous-MLP head) & $2\!\times\!10^{-4}$ & random & 0.10 (3000) & 0/100 \\

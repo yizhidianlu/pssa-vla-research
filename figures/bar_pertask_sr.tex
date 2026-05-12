@@ -44,10 +44,10 @@
 % Untrained PSSA variant_A (PSE after_image, random init, no training)
 \addplot[fill=cPSE] coordinates {
     (T0,70) (T1,80) (T2,30) (T3,70) (T4,40)
-    (T5,10) (T6,80) (T7,100) (T8,10) (T9,0)
-    (mean,54.4)
+    (T5,10) (T6,80) (T7,100) (T8,10) (T9,20)
+    (mean,51.0)
 };
-\addlegendentry{$+$ PSE prefix (untrained, $n=10$/task)$^\dagger$}
+\addlegendentry{$+$ PSE prefix (untrained, $n=10$/task)}
 
 % Best trained run (autonomy_v2c-071037, lr=2e-4)
 \addplot[fill=cTrained] coordinates {
@@ -58,9 +58,5 @@
 \addlegendentry{Trained PSSA (best of 5 configs, $n=10$/task)}
 
 \end{axis}
-\end{tikzpicture}\\[2pt]
-{\footnotesize $^\dagger$T9 data captured on persistent disk
-(\texttt{untrained\_variantA\_full-20260512-151912/task\_9.json}); the
-9-task mean of $49/90 = 54.4\%$ shown for the row label is unaffected by
-T9; the 10-task aggregate will be refreshed once the machine is back online.}
+\end{tikzpicture}
 \end{document}
