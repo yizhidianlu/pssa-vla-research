@@ -5,7 +5,7 @@
   "topic_brief": "Move VLA grounding from single-frame region-level alignment to temporally-consistent scene-level entity tracking; use that consistency to detect and correct execution-time errors in long-horizon, multi-stage, dynamic manipulation.",
   "pipeline_mode": "deep",
   "paper_mode": "original_research",
-  "current_stage": "phase2_v2c_22pct_breakthrough_tuning_lr_for_baseline_match",
+  "current_stage": "phase2_v2c_latex_draft_with_untrained_baseline_54pct_negative_training_finding",
   "started_at": "2026-05-09T00:04:00+08:00",
   "stages": {
     "init": {
@@ -233,6 +233,30 @@
         "config_change": "lr 2e-4 → 2e-5 (10x smaller, single-knob change)",
         "hypothesis": "preserve OpenVLA baseline by minimizing PSE+LoRA perturbation",
         "eta": "~3.5 hr (training 2.5 hr + eval 1 hr)"
+      },
+      "v2c_iteration_outcomes": {
+        "untrained_variantA_full": {
+          "dir": "experiment/runs/untrained_variantA_full-20260512-151912",
+          "config": "PSE after_image, n_entities=8, random init, no LoRA training",
+          "per_task_sr_9_of_10": {"0": 0.7, "1": 0.8, "2": 0.3, "3": 0.7, "4": 0.4, "5": 0.1, "6": 0.8, "7": 1.0, "8": 0.1},
+          "running_total_9_tasks": "49/90 = 54.4%",
+          "t9_pending": "machine auto-shutdown fired; T9 on persistent disk",
+          "interpretation": "PSE prefix at OpenVLA-canonical position preserves frozen-backbone policy (-25.8 pp from no-PSE 80.2% baseline)"
+        },
+        "five_training_configs_all_worse_than_untrained": {
+          "best": {"name": "autonomy_v2c-20260512-071037", "sr": 0.22, "lr": "2e-4", "pse_init": "random"},
+          "broken_layout": {"v1.1": 0.00, "v2": 0.00, "v2c_r1_text_first": 0.00},
+          "diagnostic_scan": "intermediate ckpts of 22% run all 0% on tasks 0,5",
+          "planB_v5_terminated": "loss rising 2.30 -> 3.36 after step 400 with zero-init + lr=2e-5"
+        },
+        "six_implementation_bugs_documented": [
+          "sequence layout text-first vs OpenVLA canonical [BOS|image|text]",
+          "action vocab boundary text_config.vocab_size - pad_to_multiple_of (32000) not 32064",
+          "bin_centers 255 not 256 (from 256 bin edges)",
+          "DDP accelerator.prepare(sched) advances per-rank -> T_max consumed at half time",
+          "training prompt must match OpenVLA 'In: What action should the robot take to ...?\\nOut:'",
+          "demo image needs rgb[::-1,::-1] 180-degree rotation to match Phase-1 eval"
+        ]
       }
     },
     "phase2_scope": "implement PSSA action head training (PSE-Tok + XTC-Loss + CRED) on top of frozen OpenVLA backbone, train on LIBERO demo data",
