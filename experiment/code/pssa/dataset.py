@@ -89,19 +89,25 @@ class LIBEROEpisodeDataset(IterableDataset):
         """Read one demo from an HDF5 file.
 
         Action conventions (LIBERO-spatial OpenVLA-FT):
-          - dims 0..5 (delta xyz/rpy): masked-True. norm_stats q01/q99 used
-            to un-normalize. Demos already in compatible range.
-          - dim 6 (gripper): masked-False. OpenVLA's predict_action keeps it
-            in [-1, +1] (the bin_center range). LIBERO demos are bimodal
-            {-1, +1} already in this range — pass through unchanged.
-            Phase-1's --libero-action-fix translates OpenVLA's continuous
-            output to env.step's binary convention at INFERENCE only.
+          - dims 0..5 (delta xyz/rpy): masked-True. q01/q99 stretch applied
+            at INFERENCE only (predict_action). Training uses raw clipped.
+          - dim 6 (gripper): masked-False. Demos {-1, +1} bimodal already
+            in OpenVLA's normalized range — pass through.
+
+        Image orientation fix: LIBERO env's `obs["agentview_image"]` is
+        upside-down (mujoco convention); Phase-1's `--libero-image-fix`
+        applies `rgb[::-1, ::-1]` to make it match OpenVLA's training
+        distribution. Demos in HDF5 are stored in the same raw orientation
+        as env obs, so we must apply the same rotation here for training.
+        Without this, training distribution differs from eval distribution.
         """
         with h5py.File(h5path, "r") as f:
             grp = f["data"][demo_key]
             actions = grp["actions"][...].astype(np.float32)         # (T, 7)
             rgb = grp["obs/agentview_rgb"][...].astype(np.uint8)     # (T, H, W, 3)
             language = grp.attrs.get("language", h5path.stem)
+        # 180° rotate (vertical + horizontal flip) to match Phase-1 eval distribution
+        rgb = rgb[:, ::-1, ::-1, :].copy()
         return {"actions": actions, "rgb": rgb, "language": str(language)}
 
     def _list_demos(self, h5path: Path) -> list[str]:
