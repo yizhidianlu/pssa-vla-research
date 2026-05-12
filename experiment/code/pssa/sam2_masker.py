@@ -299,16 +299,10 @@ class SAM2Masker:
             if hasattr(predictor, "init_state_from_numpy_frames"):
                 state = predictor.init_state_from_numpy_frames(rgb_seq)
             elif hasattr(predictor, "init_state"):
-                # Newer API: init_state accepts video_path OR a frame tensor.
-                # We construct a (T, 3, H, W) torch tensor in [0, 255].
-                frames_t = (
-                    torch.from_numpy(rgb_seq).permute(0, 3, 1, 2).contiguous()
-                )
-                try:
-                    state = predictor.init_state(video_path=frames_t)
-                except TypeError:
-                    # Some versions require disk frames; dump to a tmpdir.
-                    state = self._init_state_via_tmpdir(predictor, rgb_seq)
+                # Current SAM-2 release: init_state only accepts an MP4
+                # path or a JPEG folder (see sam2.utils.misc.load_video_frames).
+                # Always dump to a JPEG tempdir and pass the dir path.
+                state = self._init_state_via_tmpdir(predictor, rgb_seq)
             else:
                 raise RuntimeError(
                     "SAM2VideoPredictor lacks init_state / init_state_from_numpy_frames"
