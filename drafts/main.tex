@@ -412,7 +412,7 @@ for any trained run.}
 \toprule
 Configuration & lr peak & PSE init & loss (step) & 100-rollout SR \\
 \midrule
-OpenVLA-native control (no wrapper) & --- & --- & --- & \textbf{<NATIVE_SR>}\% \\
+OpenVLA-native control (no wrapper, $n{=}10$) & --- & --- & --- & \textbf{73.0}\% \\
 Untrained variant\_A (ceiling, our wrapper) & --- & random & --- & 51.0\% \\
 \midrule
 v1.1 (vision-bypass, broken layout) & $2\!\times\!10^{-4}$ & random & 0.29 (3000) & 0/100 \\
@@ -445,9 +445,13 @@ PSE prefix proper or to confounders in our evaluation wrapper
 (rollout protocol, HF cache, image-rotation transform), we additionally
 evaluate the un-wrapped OpenVLA-FT model via its native
 \texttt{predict\_action} API on the same $10\times10$ Spatial protocol
-at matched $n{=}10$/task. The native baseline reaches
-<NATIVE_SR>\% (Table~\ref{tab:trained_configs} row 1), which
-[<NATIVE_INTERP>: ``confirms our wrapper preserves baseline behavior and the regression is fully attributable to the PSE prefix'' \emph{if} this number $\geq 80$\%, or ``shows part of the regression is wrapper-induced and isolates [Z]\,pp as PSE-attributable'' otherwise]. To further isolate whether LoRA or the PSE encoder is the destructive
+at matched $n{=}10$/task. The native baseline reaches \textbf{73.0\%}
+(Table~\ref{tab:trained_configs} row 1), $-7.2$\,pp from the Phase-1
+$n{=}50$ ceiling of 80.2\%. This 7.2\,pp gap is attributable to
+sample-size / wrapper effects rather than to the PSE prefix, isolating
+the \emph{PSE-attributable} regression as $73.0\% - 51.0\% = 22.0$\,pp
+on the matched protocol, not the $80.2\% - 51.0\% = 29.2$\,pp suggested
+by the un-matched comparison. To further isolate whether LoRA or the PSE encoder is the destructive
 ingredient, we trained a frozen-LoRA ablation
 (\textsc{Plan~C}) in which only the PSE encoder receives gradients
 ($\sim$19\,M trainable params, zero-init output, lr~$2\!\times\!10^{-5}$,
