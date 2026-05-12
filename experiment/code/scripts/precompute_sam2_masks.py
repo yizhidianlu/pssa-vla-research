@@ -131,9 +131,11 @@ def main() -> int:
                 continue
             elapsed = time.perf_counter() - ts
 
-            # Atomic write
+            # Atomic write. np.save would auto-append .npy if path doesn't
+            # end in .npy; use file object to keep the exact tmp name.
             tmp = cpath.with_suffix(".npy.tmp")
-            np.save(tmp, masks.astype(np.float32))
+            with open(tmp, "wb") as fh:
+                np.save(fh, masks.astype(np.float32))
             tmp.replace(cpath)
             done += 1
             total_elapsed = time.perf_counter() - t0

@@ -393,7 +393,9 @@ def load_cached_masks(path: Path) -> np.ndarray | None:
 def save_cached_masks(path: Path, masks: np.ndarray) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     # Atomic write: tmp -> rename, so concurrent workers don't read a
-    # half-written file.
+    # half-written file. Use a file object so np.save doesn't auto-append
+    # .npy onto the .tmp suffix (which would break the rename).
     tmp = path.with_suffix(".npy.tmp")
-    np.save(tmp, masks.astype(np.float32))
+    with open(tmp, "wb") as fh:
+        np.save(fh, masks.astype(np.float32))
     tmp.replace(path)
