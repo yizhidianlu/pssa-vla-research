@@ -88,26 +88,20 @@ class LIBEROEpisodeDataset(IterableDataset):
     def _load_demo(self, h5path: Path, demo_key: str) -> dict:
         """Read one demo from an HDF5 file.
 
-        Gripper convention fix: LIBERO HDF5 demos store gripper in {-1, +1}
-        (1 = open). OpenVLA was finetuned with gripper in [0, 1] (1 = close).
-        Phase 1's eval-time `--libero-action-fix` applies the reverse map at
-        inference. We apply the FORWARD map here so training discretization
-        targets land in OpenVLA's expected token slot:
-
-            OpenVLA_gripper = (1 - LIBERO_gripper) / 2
-              LIBERO -1 (close) -> OpenVLA +1
-              LIBERO +1 (open)  -> OpenVLA  0
-
-        Without this, training inverts the gripper direction (root cause of
-        the Gate-3 0/100 collapse despite Gate-1 untrained 80% baseline).
+        Action conventions (LIBERO-spatial OpenVLA-FT):
+          - dims 0..5 (delta xyz/rpy): masked-True. norm_stats q01/q99 used
+            to un-normalize. Demos already in compatible range.
+          - dim 6 (gripper): masked-False. OpenVLA's predict_action keeps it
+            in [-1, +1] (the bin_center range). LIBERO demos are bimodal
+            {-1, +1} already in this range — pass through unchanged.
+            Phase-1's --libero-action-fix translates OpenVLA's continuous
+            output to env.step's binary convention at INFERENCE only.
         """
         with h5py.File(h5path, "r") as f:
             grp = f["data"][demo_key]
             actions = grp["actions"][...].astype(np.float32)         # (T, 7)
             rgb = grp["obs/agentview_rgb"][...].astype(np.uint8)     # (T, H, W, 3)
             language = grp.attrs.get("language", h5path.stem)
-        # Gripper convention fix (LIBERO -> OpenVLA)
-        actions[:, 6] = (1.0 - actions[:, 6]) / 2.0
         return {"actions": actions, "rgb": rgb, "language": str(language)}
 
     def _list_demos(self, h5path: Path) -> list[str]:
