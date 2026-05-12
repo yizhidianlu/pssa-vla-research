@@ -179,40 +179,90 @@ class LIBEROEpisodeDataset(IterableDataset):
         )
         return task_hash, demo_id
 
+    def _full_demo_cache_path(
+        self, task_h5: Path, demo_key: str, H: int, W: int,
+    ) -> Path | None:
+        """Path to the precomputed FULL-demo mask cache, written by
+        `scripts/precompute_sam2_masks.py`.  Shape on disk:
+        (T_demo, N, H, W) float32.  Returns None if no cache dir
+        configured."""
+        if self.sam2_cache_dir is None:
+            return None
+        task_hash = hashlib.sha1(
+            f"{task_h5.resolve()}|{self.suite}".encode()
+        ).hexdigest()[:16]
+        return self.sam2_cache_dir / task_hash / (
+            f"{demo_key}_N{self.n_entities}_H{H}_W{W}_full.npy"
+        )
+
     def _get_sam2_masks(
         self,
         task_h5: Path,
         demo_key: str,
         rgb_clip: np.ndarray,
+        init_end: int | None = None,
+        win_start: int | None = None,
+        win_end: int | None = None,
     ) -> np.ndarray:
-        """Return (T_total, N, H, W) float32 masks, hitting cache when
-        possible.  `rgb_clip` is the concatenation of init frames +
-        training window in HxWx3 uint8 form.
+        """Return (T_total, N, H, W) float32 masks for the rgb_clip.
+
+        Lookup order:
+        1. Precomputed FULL-demo cache at
+           `{cache_dir}/{task_hash}/{demo_key}_N{N}_H{H}_W{W}_full.npy`.
+           If present, slice [0:init_end] + [win_start:win_end] from
+           it. This is the preferred path — `scripts/precompute_sam2_masks.py`
+           propagates over the whole demo so the slicing produces masks
+           propagated through ALL intermediate frames (not jumpy across
+           the init/window boundary like an on-the-fly compute would).
+        2. Legacy clip-keyed cache (old behavior, for backward compat).
+        3. Live SAM-2 compute on rgb_clip (cold path).
         """
         from pssa.sam2_masker import cache_path, load_cached_masks, save_cached_masks
         T_total = rgb_clip.shape[0]
+        H_clip = rgb_clip.shape[1]
+        W_clip = rgb_clip.shape[2]
+
+        # ---- 1. Full-demo cache (preferred) -----------------------------
+        full_cache = self._full_demo_cache_path(task_h5, demo_key, H_clip, W_clip)
+        if (
+            full_cache is not None
+            and full_cache.is_file()
+            and init_end is not None
+            and win_start is not None
+            and win_end is not None
+        ):
+            try:
+                arr = np.load(full_cache, allow_pickle=False, mmap_mode="r")
+                if (
+                    arr.shape[1:] == (self.n_entities, H_clip, W_clip)
+                    and arr.shape[0] >= win_end
+                ):
+                    init_slice = np.asarray(arr[:init_end])
+                    win_slice = np.asarray(arr[win_start:win_end])
+                    return np.concatenate([init_slice, win_slice], axis=0)
+            except Exception:
+                pass  # fall through to clip-keyed cache
+
+        # ---- 2. Legacy clip-keyed cache --------------------------------
         if self.sam2_cache_dir is not None:
             task_hash, demo_id = self._sam2_cache_key(task_h5, demo_key, T_total)
             cpath = cache_path(self.sam2_cache_dir, task_hash, demo_id)
             cached = load_cached_masks(cpath)
             if cached is not None and cached.shape == (
-                T_total,
-                self.n_entities,
-                rgb_clip.shape[1],
-                rgb_clip.shape[2],
+                T_total, self.n_entities, H_clip, W_clip,
             ):
                 return cached
         else:
             cpath = None
 
+        # ---- 3. Live compute ------------------------------------------
         masker = self._ensure_sam2()
         masks = masker.mask_frames(rgb_clip, n_entities=self.n_entities)
         if cpath is not None:
             try:
                 save_cached_masks(cpath, masks)
             except OSError:
-                # Cache write failed (full disk, perm error) — non-fatal.
-                pass
+                pass  # non-fatal
         return masks
 
     # ----- iterator -------------------------------------------------------
@@ -282,7 +332,10 @@ class LIBEROEpisodeDataset(IterableDataset):
                 # practice. (LIBERO demos are typically 100-200 frames so
                 # the jump is bounded.)
                 rgb_clip = np.concatenate([rgb_init, rgb_win], axis=0)
-                masks_full = self._get_sam2_masks(task_h5, demo_key, rgb_clip)
+                masks_full = self._get_sam2_masks(
+                    task_h5, demo_key, rgb_clip,
+                    init_end=init_end, win_start=win_start, win_end=win_end,
+                )
                 # masks_full: (T0 + T, N, H, W)
                 masks_init_t = torch.from_numpy(masks_full).float()
                 masks_seq_t = torch.from_numpy(
