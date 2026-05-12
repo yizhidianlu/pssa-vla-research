@@ -412,13 +412,16 @@ for any trained run.}
 \toprule
 Configuration & lr peak & PSE init & loss (step) & 100-rollout SR \\
 \midrule
-Untrained variant\_A (ceiling) & --- & random & --- & 51.0\% \\
+OpenVLA-native control (no wrapper) & --- & --- & --- & \textbf{<NATIVE_SR>}\% \\
+Untrained variant\_A (ceiling, our wrapper) & --- & random & --- & 51.0\% \\
 \midrule
 v1.1 (vision-bypass, broken layout) & $2\!\times\!10^{-4}$ & random & 0.29 (3000) & 0/100 \\
 v2 (continuous-MLP head) & $2\!\times\!10^{-4}$ & random & 0.10 (3000) & 0/100 \\
 v2c-r1 (text-first layout) & $2\!\times\!10^{-4}$ & random & 2.62 (3000) & 0/100 \\
 v2c \texttt{071037} (canonical layout) & $2\!\times\!10^{-4}$ & random & 0.29 (3000) & \textbf{22/100} \\
 v2c PlanB-v5 (zero-init + low lr) & $2\!\times\!10^{-5}$ & zero-init & 3.36 (700) & terminated \\
+\midrule
+v2c Plan C (frozen LoRA, PSE-only) & $2\!\times\!10^{-5}$ & zero-init & <PLANC_LOSS> (3000) & \textbf{<PLANC_SR>}/100 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -435,6 +438,25 @@ grounding. Zero-init of the PSE projection mitigates (ii) but
 $\mathcal{L}_\text{xtc}$ on \emph{currently-randomly-projected} entity
 features is itself ill-defined; this is the subject of
 Section~\ref{sec:exp_xtc_dead}.
+
+\paragraph{Matched-control isolation.} To isolate whether the
+$\sim$27\,pp regression of untrained variant\_A is attributable to the
+PSE prefix proper or to confounders in our evaluation wrapper
+(rollout protocol, HF cache, image-rotation transform), we additionally
+evaluate the un-wrapped OpenVLA-FT model via its native
+\texttt{predict\_action} API on the same $10\times10$ Spatial protocol
+at matched $n{=}10$/task. The native baseline reaches
+<NATIVE_SR>\% (Table~\ref{tab:trained_configs} row 1), which
+[<NATIVE_INTERP>: ``confirms our wrapper preserves baseline behavior and the regression is fully attributable to the PSE prefix'' \emph{if} this number $\geq 80$\%, or ``shows part of the regression is wrapper-induced and isolates [Z]\,pp as PSE-attributable'' otherwise]. To further isolate whether LoRA or the PSE encoder is the destructive
+ingredient, we trained a frozen-LoRA ablation
+(\textsc{Plan~C}) in which only the PSE encoder receives gradients
+($\sim$19\,M trainable params, zero-init output, lr~$2\!\times\!10^{-5}$,
+3000 steps). The resulting policy scores <PLANC_SR>\% on the same
+$10\times10$ Spatial protocol, which is [\emph{<PLANC_INTERP>}: ``better than the
+51.0\% un-trained ceiling, identifying LoRA gradients as the dominant
+degradation source'' or ``worse than the un-trained ceiling, indicating
+that even PSE-only supervised training under our objective is
+destructive''].
 
 \subsection{$\mathcal{L}_\text{xtc}$ is below numerical resolution in
 vision-bypass settings}
