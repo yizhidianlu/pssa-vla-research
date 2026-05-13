@@ -26,6 +26,8 @@ REPO_ROOT=${REPO_ROOT:-/root/autodl-tmp/pssa-vla}
 cd "$REPO_ROOT/experiment/code"
 
 PY=/root/miniconda3/envs/pssa-vla/bin/python
+ACCELERATE=/root/miniconda3/envs/pssa-vla/bin/accelerate
+export PATH=/root/miniconda3/envs/pssa-vla/bin:$PATH
 TS=$(date +%Y%m%d-%H%M%S)
 SEED=${SEED:-1}
 OUT_DIR="$REPO_ROOT/experiment/runs/a1_sam2_spatial_seed${SEED}-${TS}"
@@ -37,7 +39,7 @@ export HF_HOME=${HF_HOME:-/root/autodl-tmp/hf}
 
 # ======================== Training ========================
 echo "=== A1 training (seed=$SEED) ==="
-accelerate launch \
+$ACCELERATE launch \
     --num_processes 2 \
     --num_machines 1 \
     --multi_gpu \
